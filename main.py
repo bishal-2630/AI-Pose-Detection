@@ -1,73 +1,115 @@
 import cv2
 import numpy as np
 
-# Try importing MediaPipe with error handling
+# Try importing MediaPipe
 try:
     import mediapipe as mp
-    
-    # Initialize MediaPipe components
     mp_drawing = mp.solutions.drawing_utils
     mp_pose = mp.solutions.pose
-    
     print("MediaPipe imported successfully!")
-    
 except ImportError as e:
-    print(f"Error importing MediaPipe: {e}")
-    print("Please install: pip install mediapipe")
-    exit(1)
-except Exception as e:
-    print(f"Unexpected error importing MediaPipe: {e}")
+    print(f"Error: {e}")
+    print("Install: pip install mediapipe")
     exit(1)
 
+def show_exercise_dialog():
+    """Show dialog box to select exercise"""
+    dialog = np.zeros((300, 500, 3), dtype=np.uint8)
+    
+    cv2.putText(dialog, 'SELECT EXERCISE', (100, 50), 
+                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+    
+    button_width = 200
+    button_height = 50
+    start_y = 100
+    
+    exercises = [
+        ("BICEP CURLS", (0, 255, 0)),
+        ("PUSH-UPS", (255, 165, 0)),
+        ("PULL-UPS", (0, 191, 255)),
+        ("EXIT", (255, 50, 50))
+    ]
+    
+    buttons = []
+    
+    for i, (name, color) in enumerate(exercises):
+        y = start_y + i * (button_height + 20)
+        x = 150
+        
+        cv2.rectangle(dialog, (x, y), (x + button_width, y + button_height), color, -1)
+        cv2.rectangle(dialog, (x, y), (x + button_width, y + button_height), (255, 255, 255), 2)
+        
+        text_size = cv2.getTextSize(name, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
+        text_x = x + (button_width - text_size[0]) // 2
+        text_y = y + (button_height + text_size[1]) // 2
+        
+        cv2.putText(dialog, name, (text_x, text_y), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        buttons.append((x, y, x + button_width, y + button_height, name))
+    
+    cv2.putText(dialog, 'Click to select | Press ESC to exit', (100, 280), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+    
+    cv2.imshow('Select Exercise', dialog)
+    
+    selected = None
+    while True:
+        key = cv2.waitKey(1) & 0xFF
+        
+        def mouse_callback(event, x, y, flags, param):
+            nonlocal selected
+            if event == cv2.EVENT_LBUTTONDOWN:
+                for bx1, by1, bx2, by2, name in buttons:
+                    if bx1 <= x <= bx2 and by1 <= y <= by2:
+                        selected = name
+                        break
+        
+        cv2.setMouseCallback('Select Exercise', mouse_callback)
+        
+        if selected is not None:
+            break
+            
+        if key == 27:
+            selected = "EXIT"
+            break
+    
+    cv2.destroyWindow('Select Exercise')
+    
+    if selected == "EXIT":
+        return None
+    
+    exercise_map = {
+        "BICEP CURLS": "curls",
+        "PUSH-UPS": "pushups",
+        "PULL-UPS": "pullups"
+    }
+    
+    print(f"\nSelected: {selected}")
+    return exercise_map.get(selected)
+
 def calculate_angle(a, b, c):
-    """Calculate the angle between three points"""
+    """Calculate angle between three points"""
     a = np.array(a)
     b = np.array(b)
     c = np.array(c)
     
-    # Calculate radians
     radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
     angle = np.abs(radians * 180.0 / np.pi)
     
-    # Ensure angle is between 0 and 180
     if angle > 180.0:
         angle = 360 - angle
     
     return angle
 
-def calculate_torso_angle(shoulder, hip, ankle):
-    """Calculate torso angle relative to vertical (0° = upright, 90° = horizontal)"""
-    shoulder = np.array(shoulder)
-    hip = np.array(hip)
-    
-    # Calculate torso vector (hip to shoulder)
-    torso_vector = shoulder - hip
-    
-    # Calculate vertical vector (0, -1) pointing upward
-    vertical_vector = np.array([0, -1])
-    
-    # Calculate angle between torso and vertical
-    dot_product = np.dot(torso_vector, vertical_vector)
-    norm_torso = np.linalg.norm(torso_vector)
-    norm_vertical = np.linalg.norm(vertical_vector)
-    
-    # Avoid division by zero
-    if norm_torso == 0:
-        return 0
-    
-    cos_angle = dot_product / (norm_torso * norm_vertical)
-    # Clamp value to avoid numerical errors
-    cos_angle = np.clip(cos_angle, -1.0, 1.0)
-    
-    angle = np.degrees(np.arccos(cos_angle))
-    
-    return angle
-
-def detect_exercise(landmarks, torso_angle, left_elbow_angle, right_elbow_angle):
-    """Automatically detect which exercise is being performed"""
-    
+def is_pushup_position_for_face_camera(landmarks):
+    """
+    Check if body is in push-up position when camera is facing you.
+    Camera sees your face when you're in push-up position.
+    """
     try:
         # Get key landmarks
+        nose = landmarks[mp_pose.PoseLandmark.NOSE.value]
         left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
         right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
         left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
@@ -75,315 +117,298 @@ def detect_exercise(landmarks, torso_angle, left_elbow_angle, right_elbow_angle)
         left_wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value]
         right_wrist = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value]
         
-        # Calculate average positions
-        avg_shoulder_y = (left_shoulder.y + right_shoulder.y) / 2
-        avg_hip_y = (left_hip.y + right_hip.y) / 2
-        avg_wrist_y = (left_wrist.y + right_wrist.y) / 2
+        # For push-ups with camera facing you:
+        # 1. Nose should be visible (camera sees your face)
+        # 2. Shoulders should be above hips (you're looking at camera)
+        # 3. Wrists should be near shoulder level (hands on ground)
         
-        # Check wrist position relative to body
-        wrist_above_shoulders = avg_wrist_y < avg_shoulder_y - 0.1
+        # Check if nose is visible (y coordinate < 1.0 means it's in frame)
+        nose_visible = nose.y < 0.9
         
+        # Check if shoulders are above hips (for push-up position)
+        shoulders_above_hips = (left_shoulder.y < left_hip.y and 
+                               right_shoulder.y < right_hip.y)
         
-        # Improved detection logic
-        if torso_angle > 60:  
-            # For push-ups, check if wrists are near shoulder level
-            wrist_near_shoulders = abs(avg_wrist_y - avg_shoulder_y) < 0.2
-            if wrist_near_shoulders:
-                return "pushup"
+        # Check if wrists are near shoulders (hands at shoulder level)
+        left_wrist_near_shoulder = abs(left_wrist.y - left_shoulder.y) < 0.3
+        right_wrist_near_shoulder = abs(right_wrist.y - right_shoulder.y) < 0.3
+        wrists_at_shoulder_level = left_wrist_near_shoulder or right_wrist_near_shoulder
         
-        elif torso_angle <= 60:  # Body is more vertical
-            if wrist_above_shoulders:  # Arms are overhead (pull-up)
-                return "pullup"
-            else:  # Arms at sides (curl)
-                if avg_wrist_y > avg_hip_y - 0.15:
-                    return "curl"
+        # All conditions must be true for push-up position
+        return nose_visible and shoulders_above_hips and wrists_at_shoulder_level
         
-        return "none"
-    except Exception as e:
-        # print(f"Detection error: {e}")
-        return "none"
+    except:
+        return False
 
-def main():
-    """Main function to run the exercise counter"""
-    print("Initializing exercise counter...")
+def count_curls(counter, stage, left_angle, right_angle):
+    """Count bicep curls"""
+    avg_angle = (left_angle + right_angle) / 2
     
-    # Initialize video capture
-    print("Opening camera...")
+    if avg_angle > 160:
+        stage = "down"
+    
+    if avg_angle < 50 and stage == "down":
+        stage = "up"
+        counter += 1
+        print(f"Curl Rep: {counter}")
+    
+    return counter, stage
+
+def count_pushups_for_face_camera(counter, stage, left_angle, right_angle, landmarks):
+    """
+    Count push-ups when camera is facing you.
+    Uses elbow angle to count reps.
+    """
+    avg_angle = (left_angle + right_angle) / 2
+    
+    # First check if we're in push-up position (camera sees face)
+    in_position = is_pushup_position_for_face_camera(landmarks)
+    
+    if not in_position:
+        # Not in push-up position
+        stage = None
+        return counter, stage, in_position
+    
+    # IN PUSH-UP POSITION - count using elbow angles
+    
+    # Push-up counting logic:
+    # UP position: Arms extended (elbow angle > 160°)
+    # DOWN position: Arms bent, chest lowered (elbow angle < 90°)
+    # Count: When going from UP -> DOWN -> UP (one full rep)
+    
+    if avg_angle > 160:  # Arms fully extended - UP position
+        stage = "up"
+    
+    if avg_angle < 90 and stage == "up":  # Arms bent - DOWN position (count rep)
+        stage = "down"
+        counter += 1
+        print(f"Push-up Rep: {counter}")
+    
+    return counter, stage, in_position
+
+def count_pullups(counter, stage, left_angle, right_angle, landmarks):
+    """Count pull-ups"""
+    avg_angle = (left_angle + right_angle) / 2
+    
+    # Check if in pull-up position (arms overhead)
+    try:
+        left_wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value]
+        right_wrist = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value]
+        left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
+        right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+        
+        left_wrist_above = left_wrist.y < left_shoulder.y - 0.05
+        right_wrist_above = right_wrist.y < right_shoulder.y - 0.05
+        in_position = left_wrist_above or right_wrist_above
+    except:
+        in_position = False
+    
+    if not in_position:
+        stage = None
+        return counter, stage, in_position
+    
+    if avg_angle > 150:
+        stage = "down"
+    
+    if avg_angle < 80 and stage == "down":
+        stage = "up"
+        counter += 1
+        print(f"Pull-up Rep: {counter}")
+    
+    return counter, stage, in_position
+
+def run_exercise_counter(exercise):
+    """Run camera and count reps"""
+    display_names = {
+        "curls": "BICEP CURLS",
+        "pushups": "PUSH-UPS",
+        "pullups": "PULL-UPS"
+    }
+    
+    print(f"\nStarting {display_names[exercise]} counter...")
+    print("INSTRUCTIONS:")
+    
+    if exercise == "pushups":
+        print("1. Place camera in front of your face")
+        print("2. Get into push-up position (camera should see your face)")
+        print("3. Perform push-ups normally")
+    elif exercise == "curls":
+        print("1. Stand facing camera")
+        print("2. Perform bicep curls")
+    elif exercise == "pullups":
+        print("1. Stand with arms overhead")
+        print("2. Perform pull-up motion")
+    
+    print("\nPress 'Q' to quit\n")
+    
     cap = cv2.VideoCapture(0)
-    
     if not cap.isOpened():
-        print("ERROR: Could not open webcam!")
-        print("Please check:")
-        print("1. Is your webcam connected?")
-        print("2. Is another program using the webcam?")
-        print("3. Try running as administrator")
-        return
+        print("ERROR: Could not open camera!")
+        return 0
     
-    print("Camera opened successfully!")
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
-    # Set webcam resolution for better performance
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    counter = 0
+    stage = None
     
-    # Initialize counters and stages for each exercise
-    curl_counter = 0
-    pushup_counter = 0
-    pullup_counter = 0
-    
-    curl_stage = None
-    pushup_stage = None
-    pullup_stage = None
-    
-    current_exercise = "none"
-    exercise_history = []
-    confidence_threshold = 5  # Number of frames to confirm exercise
-    
-    # Setup MediaPipe instance
-    print("Initializing MediaPipe pose estimation...")
     with mp_pose.Pose(
-        min_detection_confidence=0.5,  # Lowered for better detection
-        min_tracking_confidence=0.5,   # Lowered for better tracking
-        model_complexity=1  # 0=Light, 1=Full, 2=Heavy
+        min_detection_confidence=0.7,
+        min_tracking_confidence=0.7,
+        model_complexity=1
     ) as pose:
-        
-        print("="*50)
-        print("Starting exercise detection...")
-        print("Instructions:")
-        print("1. Bicep Curls: Stand with arms at sides")
-        print("2. Push-ups: Get into plank position")
-        print("3. Pull-ups: Stand with arms overhead")
-        print("Press 'Q' to quit")
-        print("="*50)
-        
-        frame_count = 0
         
         while cap.isOpened():
             ret, frame = cap.read()
-            frame_count += 1
-            
             if not ret:
-                print(f"Frame {frame_count}: Failed to grab frame")
                 break
             
-            # Flip frame horizontally for mirror view
+            # Flip for mirror view
             frame = cv2.flip(frame, 1)
             
-            # Recolor image to RGB (MediaPipe requires RGB)
             image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             image.flags.writeable = False
-            
-            # Make detection
             results = pose.process(image)
-            
-            # Recolor back to BGR (OpenCV uses BGR)
             image.flags.writeable = True
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
             
-            # Get image dimensions
-            h, w, _ = image.shape
+            h, w = image.shape[:2]
             
-            # Initialize angle variables
-            left_elbow_angle = 0
-            right_elbow_angle = 0
-            torso_angle = 0
-            avg_elbow_angle = 0
+            left_angle = right_angle = 0
+            landmarks = None
+            in_position = True  # Default True for curls
             
-            # Extract landmarks and process
-            try:
-                if results.pose_landmarks:
-                    landmarks = results.pose_landmarks.landmark
-                    
-                    # Get coordinates for calculations (LEFT SIDE)
-                    left_shoulder_coords = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x,
-                                            landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
-                    left_elbow_coords = [landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].x,
-                                         landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].y]
-                    left_wrist_coords = [landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x,
-                                         landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y]
-                    left_hip_coords = [landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x,
-                                       landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y]
-                    left_ankle_coords = [landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x,
-                                         landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y]
-                    
-                    # Get coordinates for calculations (RIGHT SIDE)
-                    right_shoulder_coords = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x,
-                                             landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y]
-                    right_elbow_coords = [landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].x,
-                                          landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].y]
-                    right_wrist_coords = [landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x,
-                                          landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y]
-                    
-                    # Calculate angles
-                    left_elbow_angle = calculate_angle(left_shoulder_coords, left_elbow_coords, left_wrist_coords)
-                    right_elbow_angle = calculate_angle(right_shoulder_coords, right_elbow_coords, right_wrist_coords)
-                    
-                    # Calculate torso angle
-                    torso_angle = calculate_torso_angle(left_shoulder_coords, left_hip_coords, left_ankle_coords)
-                    
-                    # Detect current exercise
-                    new_exercise = detect_exercise(landmarks, torso_angle, left_elbow_angle, right_elbow_angle)
-                    
-                    # Update exercise history
-                    exercise_history.append(new_exercise)
-                    if len(exercise_history) > 10:
-                        exercise_history.pop(0)
-                    
-                    # Change exercise only if detected consistently
-                    if len(exercise_history) >= confidence_threshold:
-                        # Count occurrences of each exercise in recent history
-                        from collections import Counter
-                        exercise_counts = Counter(exercise_history)
-                        
-                        # Get the most common exercise (excluding "none")
-                        valid_exercises = {k: v for k, v in exercise_counts.items() if k != "none"}
-                        
-                        if valid_exercises:
-                            most_common = max(valid_exercises, key=valid_exercises.get)
-                            if valid_exercises[most_common] >= confidence_threshold // 2:
-                                current_exercise = most_common
-                    
-                    # Get average elbow angle for counting
-                    avg_elbow_angle = (left_elbow_angle + right_elbow_angle) / 2
-                    
-                    # Exercise-specific counting logic
-                    if current_exercise == "curl":
-                        # Bicep curl counter logic
-                        if avg_elbow_angle > 160:
-                            curl_stage = "down"
-                        if avg_elbow_angle < 40 and curl_stage == "down":
-                            curl_stage = "up"
-                            curl_counter += 1
-                            print(f"Bicep Curl Rep: {curl_counter}")
-                    
-                    elif current_exercise == "pushup":
-                        # Push-up counter logic
-                        if avg_elbow_angle > 150:
-                            pushup_stage = "up"
-                        if avg_elbow_angle < 90 and pushup_stage == "up":
-                            pushup_stage = "down"
-                            pushup_counter += 1
-                            print(f"Push-up Rep: {pushup_counter}")
-                    
-                    elif current_exercise == "pullup":
-                        # Pull-up counter logic
-                        if avg_elbow_angle > 150:
-                            pullup_stage = "down"
-                        if avg_elbow_angle < 60 and pullup_stage == "down":
-                            pullup_stage = "up"
-                            pullup_counter += 1
-                            print(f"Pull-up Rep: {pullup_counter}")
-                    
-                    # Visual feedback on screen
-                    # Display torso angle
-                    cv2.putText(image, f'Torso: {torso_angle:.1f}°', 
-                               (w - 250, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                    
-                    # Display elbow angles
-                    cv2.putText(image, f'L: {left_elbow_angle:.1f}°  R: {right_elbow_angle:.1f}°', 
-                               (w - 250, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
-                    
-                    # Print debug info every 50 frames
-                    if frame_count % 50 == 0:
-                        print(f"Frame {frame_count}: Exercise={current_exercise}, "
-                              f"Torso={torso_angle:.1f}°, L={left_elbow_angle:.1f}°, R={right_elbow_angle:.1f}°")
+            if results.pose_landmarks:
+                landmarks = results.pose_landmarks.landmark
+                
+                # Get left elbow angle
+                left_shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x,
+                                landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
+                left_elbow = [landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].x,
+                             landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].y]
+                left_wrist = [landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x,
+                             landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y]
+                left_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
+                
+                # Get right elbow angle
+                right_shoulder = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x,
+                                 landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y]
+                right_elbow = [landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].x,
+                              landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].y]
+                right_wrist = [landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x,
+                              landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y]
+                right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
+                
+                # Count based on exercise
+                if exercise == "curls":
+                    counter, stage = count_curls(counter, stage, left_angle, right_angle)
+                    in_position = True
+                elif exercise == "pushups":
+                    counter, stage, in_position = count_pushups_for_face_camera(
+                        counter, stage, left_angle, right_angle, landmarks)
+                elif exercise == "pullups":
+                    counter, stage, in_position = count_pullups(
+                        counter, stage, left_angle, right_angle, landmarks)
             
-            except Exception as e:
-                # Print error for debugging
-                if frame_count % 100 == 0:  # Print every 100 frames to avoid spam
-                    print(f"Frame {frame_count}: Error in pose processing: {e}")
+            # ===== UI ON LEFT SIDE =====
+            ui_width = 250
             
-            # Setup UI elements
-            # Main status box
-            cv2.rectangle(image, (0, 0), (400, 160), (40, 40, 40), -1)
+            overlay = image.copy()
+            cv2.rectangle(overlay, (0, 0), (ui_width, h), (0, 0, 0), -1)
+            image = cv2.addWeighted(overlay, 0.7, image, 0.3, 0)
             
-            # Define exercise colors
-            exercise_colors = {
-                "curl": (0, 255, 0),      # Green
-                "pushup": (255, 165, 0),  # Orange
-                "pullup": (0, 191, 255),  # Blue
-                "none": (150, 150, 150)   # Gray
+            colors = {
+                "curls": (0, 255, 0),
+                "pushups": (255, 165, 0),
+                "pullups": (0, 191, 255)
             }
             
-            current_color = exercise_colors.get(current_exercise, (150, 150, 150))
+            cv2.putText(image, display_names[exercise], (20, 40), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.9, colors[exercise], 2)
             
-            # Current exercise display
-            cv2.putText(image, 'CURRENT EXERCISE:', (20, 40), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+            # Counter
+            cv2.putText(image, "REPS:", (20, 100), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
+            cv2.putText(image, str(counter), (20, 160), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), 3)
             
-            exercise_text = current_exercise.upper() if current_exercise != "none" else "NONE - MOVE TO POSITION"
-            cv2.putText(image, exercise_text, (20, 90), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1.2, current_color, 3, cv2.LINE_AA)
+            # Stage
+            if stage:
+                stage_color = (0, 255, 0) if stage == "up" else (255, 165, 0)
+                cv2.putText(image, f"STAGE: {stage.upper()}", (20, 220), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, stage_color, 2)
             
-            # Counters display box
-            cv2.rectangle(image, (0, 170), (400, 320), (30, 30, 30), -1)
+            # Angles
+            cv2.putText(image, f"L: {left_angle:.0f}°", (20, h-80), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+            cv2.putText(image, f"R: {right_angle:.0f}°", (20, h-50), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
             
-            # Bicep Curls counter
-            cv2.putText(image, 'CURLS:', (20, 210), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
-            cv2.putText(image, str(curl_counter), (20, 260), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), 4, cv2.LINE_AA)
+            # Position status
+            if exercise in ["pushups", "pullups"]:
+                if in_position:
+                    status_text = "READY TO COUNT ✓"
+                    status_color = (0, 255, 0)
+                else:
+                    if exercise == "pushups":
+                        status_text = "MOVE TO PUSH-UP"
+                    else:
+                        status_text = "ARMS NOT OVERHEAD"
+                    status_color = (0, 0, 255)
+                
+                cv2.putText(image, status_text, (20, 260), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
             
-            # Push-ups counter
-            cv2.putText(image, 'PUSH-UPS:', (150, 210), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 165, 0), 2, cv2.LINE_AA)
-            cv2.putText(image, str(pushup_counter), (150, 260), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 165, 0), 4, cv2.LINE_AA)
-            
-            # Pull-ups counter
-            cv2.putText(image, 'PULL-UPS:', (280, 210), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 191, 255), 2, cv2.LINE_AA)
-            cv2.putText(image, str(pullup_counter), (280, 260), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 191, 255), 4, cv2.LINE_AA)
-            
-            # Instructions at bottom
-            cv2.putText(image, 'Press Q to quit', (w - 150, h - 20), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
-            
-            # Position instructions
-            cv2.putText(image, 'Curl: Stand with arms down', (20, h - 80), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
-            cv2.putText(image, 'Push-up: Plank position', (20, h - 50), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
-            cv2.putText(image, 'Pull-up: Arms overhead', (20, h - 20), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
-            
-            # Render pose landmarks
+            # Draw landmarks if in position (or always for curls)
             if results.pose_landmarks:
-                mp_drawing.draw_landmarks(
-                    image, 
-                    results.pose_landmarks, 
-                    mp_pose.POSE_CONNECTIONS,
-                    mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=2),
-                    mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2)
-                )
+                if exercise == "curls" or in_position:
+                    mp_drawing.draw_landmarks(
+                        image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
+                        mp_drawing.DrawingSpec(color=colors[exercise], thickness=2, circle_radius=2),
+                        mp_drawing.DrawingSpec(color=(200, 200, 200), thickness=2, circle_radius=2)
+                    )
             
-            # Show the output
-            cv2.imshow('Automatic Exercise Counter - Curls, Push-ups, Pull-ups', image)
+            # Instruction
+            cv2.putText(image, "Press Q to quit", (w-150, h-20), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 255), 1)
             
-            # Exit on 'q' key press
+            # Show image
+            cv2.imshow(f'{display_names[exercise]} Counter', image)
+            
             if cv2.waitKey(10) & 0xFF == ord('q'):
-                print("\nUser pressed 'Q' to quit")
                 break
     
-    # Cleanup
     cap.release()
     cv2.destroyAllWindows()
+    return counter
+
+def main():
+    print("="*50)
+    print("EXERCISE COUNTER")
+    print("="*50)
     
-    # Print final counts
-    print("\n" + "="*30)
-    print("FINAL EXERCISE COUNTS:")
-    print("="*30)
-    print(f"Bicep Curls: {curl_counter}")
-    print(f"Push-ups:   {pushup_counter}")
-    print(f"Pull-ups:   {pullup_counter}")
-    print("="*30)
+    while True:
+        exercise = show_exercise_dialog()
+        
+        if exercise is None:
+            print("\nGoodbye!")
+            break
+        
+        count = run_exercise_counter(exercise)
+        
+        print(f"\n{'='*40}")
+        print(f"RESULT: {count} reps")
+        print(f"{'='*40}")
+        
+        again = input("\nCount another exercise? (y/n): ").lower()
+        if again != 'y':
+            print("\nGoodbye!")
+            break
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\nProgram interrupted by user.")
+        print("\n\nStopped by user")
     except Exception as e:
-        print(f"\n\nUnexpected error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"\nError: {e}")
