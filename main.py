@@ -102,14 +102,12 @@ def calculate_angle(a, b, c):
     
     return angle
 
-def is_pushup_position_for_face_camera(landmarks):
+def check_pushup_position_simple(landmarks):
     """
-    Check if body is in push-up position when camera is facing you.
-    Camera sees your face when you're in push-up position.
+    SIMPLE push-up position check with relaxed requirements
     """
     try:
-        # Get key landmarks
-        nose = landmarks[mp_pose.PoseLandmark.NOSE.value]
+        # Get key points
         left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
         right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
         left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
@@ -117,28 +115,29 @@ def is_pushup_position_for_face_camera(landmarks):
         left_wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value]
         right_wrist = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value]
         
-        # For push-ups with camera facing you:
-        # 1. Nose should be visible (camera sees your face)
-        # 2. Shoulders should be above hips (you're looking at camera)
-        # 3. Wrists should be near shoulder level (hands on ground)
+        # Check if wrists are visible
+        if left_wrist.visibility < 0.2 or right_wrist.visibility < 0.2:
+            return False, "Wrists not visible"
         
-        # Check if nose is visible (y coordinate < 1.0 means it's in frame)
-        nose_visible = nose.y < 0.9
+        # Simple check: body should not be completely vertical (standing)
+        shoulder_avg_y = (left_shoulder.y + right_shoulder.y) / 2
+        hip_avg_y = (left_hip.y + right_hip.y) / 2
         
-        # Check if shoulders are above hips (for push-up position)
-        shoulders_above_hips = (left_shoulder.y < left_hip.y and 
-                               right_shoulder.y < right_hip.y)
+        # In push-up, shoulders should not be way above hips
+        if shoulder_avg_y < hip_avg_y - 0.4:  # Shoulders way above hips = standing
+            return False, "Standing (get lower)"
         
-        # Check if wrists are near shoulders (hands at shoulder level)
-        left_wrist_near_shoulder = abs(left_wrist.y - left_shoulder.y) < 0.3
-        right_wrist_near_shoulder = abs(right_wrist.y - right_shoulder.y) < 0.3
-        wrists_at_shoulder_level = left_wrist_near_shoulder or right_wrist_near_shoulder
+        # Relaxed check: wrists should be roughly near shoulders
+        left_wrist_diff = abs(left_wrist.y - left_shoulder.y)
+        right_wrist_diff = abs(right_wrist.y - right_shoulder.y)
         
-        # All conditions must be true for push-up position
-        return nose_visible and shoulders_above_hips and wrists_at_shoulder_level
+        if left_wrist_diff > 0.5 or right_wrist_diff > 0.5:
+            return False, "Hands not at shoulder level"
+        
+        return True, "Ready for push-ups"
         
     except:
-        return False
+        return False, "Detection error"
 
 def count_curls(counter, stage, left_angle, right_angle):
     """Count bicep curls"""
@@ -150,72 +149,86 @@ def count_curls(counter, stage, left_angle, right_angle):
     if avg_angle < 50 and stage == "down":
         stage = "up"
         counter += 1
-        print(f"Curl Rep: {counter}")
+        print(f"Curl Rep #{counter}: L: {left_angle:.0f}°, R: {right_angle:.0f}°")
     
     return counter, stage
 
-def count_pushups_for_face_camera(counter, stage, left_angle, right_angle, landmarks):
+def count_pushups_with_thresholds(counter, stage, left_angle, right_angle, landmarks):
     """
-    Count push-ups when camera is facing you.
-    Uses elbow angle to count reps.
+    Count push-ups with realistic thresholds:
+    - DOWN: Bend up to 100° (more realistic)
+    - UP: Extend above 130° (easier to achieve)
     """
-    avg_angle = (left_angle + right_angle) / 2
-    
-    # First check if we're in push-up position (camera sees face)
-    in_position = is_pushup_position_for_face_camera(landmarks)
+    # Check if in plausible push-up position
+    in_position, feedback = check_pushup_position_simple(landmarks)
     
     if not in_position:
-        # Not in push-up position
         stage = None
-        return counter, stage, in_position
+        return counter, stage, in_position, feedback
     
-    # IN PUSH-UP POSITION - count using elbow angles
+    # Skip invalid angles
+    if left_angle < 10 or right_angle < 10:
+        return counter, stage, in_position, "Ready - move arms"
     
-    # Push-up counting logic:
-    # UP position: Arms extended (elbow angle > 160°)
-    # DOWN position: Arms bent, chest lowered (elbow angle < 90°)
-    # Count: When going from UP -> DOWN -> UP (one full rep)
-    
-    if avg_angle > 160:  # Arms fully extended - UP position
-        stage = "up"
-    
-    if avg_angle < 90 and stage == "up":  # Arms bent - DOWN position (count rep)
-        stage = "down"
-        counter += 1
-        print(f"Push-up Rep: {counter}")
-    
-    return counter, stage, in_position
-
-def count_pullups(counter, stage, left_angle, right_angle, landmarks):
-    """Count pull-ups"""
+    # Calculate average angle for consistency
     avg_angle = (left_angle + right_angle) / 2
     
-    # Check if in pull-up position (arms overhead)
+    # UPDATED THRESHOLDS:
+    # DOWN position: Bend up to 100° (more realistic)
+    if avg_angle < 100:  # CHANGED from 70° to 100°
+        if stage != "down":
+            stage = "down"
+            print(f"Push-up DOWN: L: {left_angle:.0f}°, R: {right_angle:.0f}°, Avg: {avg_angle:.0f}°")
+    
+    # UP position (count rep): Extend above 130°
+    if avg_angle > 130 and stage == "down":  # CHANGED from 140° to 130°
+        stage = "up"
+        counter += 1
+        print(f"Push-up Rep #{counter}: L: {left_angle:.0f}°, R: {right_angle:.0f}°, Avg: {avg_angle:.0f}°")
+    
+    # If just extended without coming from down
+    if avg_angle > 130 and stage != "down":
+        stage = "up"
+    
+    return counter, stage, in_position, feedback
+
+def count_pullups_simple(counter, stage, left_angle, right_angle, landmarks):
+    """Simple pull-up counting"""
+    # Check if in pull-up position
     try:
         left_wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value]
         right_wrist = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value]
         left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
         right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
         
-        left_wrist_above = left_wrist.y < left_shoulder.y - 0.05
-        right_wrist_above = right_wrist.y < right_shoulder.y - 0.05
-        in_position = left_wrist_above or right_wrist_above
+        in_position = (left_wrist.y < left_shoulder.y or 
+                      right_wrist.y < right_shoulder.y)
     except:
         in_position = False
     
     if not in_position:
         stage = None
-        return counter, stage, in_position
+        return counter, stage, in_position, "Arms not overhead"
     
-    if avg_angle > 150:
+    # Skip invalid angles
+    if left_angle < 10 or right_angle < 10:
+        return counter, stage, in_position, "Ready"
+    
+    avg_angle = (left_angle + right_angle) / 2
+    
+    # Use similar thresholds for pull-ups
+    if avg_angle < 100:
+        stage = "up"
+    
+    if avg_angle > 130 and stage == "up":
+        stage = "down"
+        counter += 1
+        print(f"Pull-up Rep #{counter}: L: {left_angle:.0f}°, R: {right_angle:.0f}°")
+    
+    if avg_angle > 130 and stage != "up":
         stage = "down"
     
-    if avg_angle < 80 and stage == "down":
-        stage = "up"
-        counter += 1
-        print(f"Pull-up Rep: {counter}")
-    
-    return counter, stage, in_position
+    return counter, stage, in_position, "Ready for pull-ups"
 
 def run_exercise_counter(exercise):
     """Run camera and count reps"""
@@ -226,20 +239,24 @@ def run_exercise_counter(exercise):
     }
     
     print(f"\nStarting {display_names[exercise]} counter...")
-    print("INSTRUCTIONS:")
+    print("=" * 50)
     
     if exercise == "pushups":
-        print("1. Place camera in front of your face")
-        print("2. Get into push-up position (camera should see your face)")
-        print("3. Perform push-ups normally")
-    elif exercise == "curls":
-        print("1. Stand facing camera")
-        print("2. Perform bicep curls")
-    elif exercise == "pullups":
-        print("1. Stand with arms overhead")
-        print("2. Perform pull-up motion")
+        print("PRACTICAL PUSH-UP COUNTER")
+        print("=" * 50)
+        print("UPDATED THRESHOLDS:")
+        print("- DOWN position: Bend up to 100° (more realistic)")
+        print("- UP position: Extend above 130° (easier to achieve)")
+        print("- Count: When going from DOWN → UP")
+        print("\nINSTRUCTIONS:")
+        print("1. Get into any push-up-like position")
+        print("2. Bend arms up to 100° (not too deep)")
+        print("3. Extend arms above 130°")
+        print("4. Make sure both arms move together")
+        print("\nTIP: You don't need perfect 90° bends!")
     
-    print("\nPress 'Q' to quit\n")
+    print("\nPress 'Q' to quit")
+    print("-" * 50)
     
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
@@ -253,8 +270,8 @@ def run_exercise_counter(exercise):
     stage = None
     
     with mp_pose.Pose(
-        min_detection_confidence=0.7,
-        min_tracking_confidence=0.7,
+        min_detection_confidence=0.6,
+        min_tracking_confidence=0.6,
         model_complexity=1
     ) as pose:
         
@@ -275,43 +292,48 @@ def run_exercise_counter(exercise):
             h, w = image.shape[:2]
             
             left_angle = right_angle = 0
-            landmarks = None
-            in_position = True  # Default True for curls
+            in_position = True  # Default for curls
+            feedback = "Ready"
             
             if results.pose_landmarks:
                 landmarks = results.pose_landmarks.landmark
                 
-                # Get left elbow angle
-                left_shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x,
-                                landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
-                left_elbow = [landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].x,
-                             landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].y]
-                left_wrist = [landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x,
-                             landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y]
-                left_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
-                
-                # Get right elbow angle
-                right_shoulder = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x,
-                                 landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y]
-                right_elbow = [landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].x,
-                              landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].y]
-                right_wrist = [landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x,
-                              landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y]
-                right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
-                
-                # Count based on exercise
-                if exercise == "curls":
-                    counter, stage = count_curls(counter, stage, left_angle, right_angle)
-                    in_position = True
-                elif exercise == "pushups":
-                    counter, stage, in_position = count_pushups_for_face_camera(
-                        counter, stage, left_angle, right_angle, landmarks)
-                elif exercise == "pullups":
-                    counter, stage, in_position = count_pullups(
-                        counter, stage, left_angle, right_angle, landmarks)
+                try:
+                    # Calculate elbow angles
+                    left_shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x,
+                                    landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
+                    left_elbow = [landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].x,
+                                 landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value].y]
+                    left_wrist = [landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x,
+                                 landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y]
+                    left_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
+                    
+                    right_shoulder = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x,
+                                     landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y]
+                    right_elbow = [landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].x,
+                                  landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value].y]
+                    right_wrist = [landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x,
+                                  landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y]
+                    right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
+                    
+                    # Count based on exercise
+                    if exercise == "curls":
+                        counter, stage = count_curls(counter, stage, left_angle, right_angle)
+                        in_position = True
+                        feedback = "Ready for curls"
+                    elif exercise == "pushups":
+                        counter, stage, in_position, feedback = count_pushups_with_thresholds(
+                            counter, stage, left_angle, right_angle, landmarks)
+                    elif exercise == "pullups":
+                        counter, stage, in_position, feedback = count_pullups_simple(
+                            counter, stage, left_angle, right_angle, landmarks)
+                            
+                except Exception as e:
+                    feedback = "Calculating..."
+                    pass
             
-            # ===== UI ON LEFT SIDE =====
-            ui_width = 250
+            # ===== UI =====
+            ui_width = 300
             
             overlay = image.copy()
             cv2.rectangle(overlay, (0, 0), (ui_width, h), (0, 0, 0), -1)
@@ -323,50 +345,120 @@ def run_exercise_counter(exercise):
                 "pullups": (0, 191, 255)
             }
             
+            # Title
             cv2.putText(image, display_names[exercise], (20, 40), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, colors[exercise], 2)
             
             # Counter
-            cv2.putText(image, "REPS:", (20, 100), 
+            counter_color = (0, 255, 0) if in_position else (100, 100, 100)
+            cv2.putText(image, "REPS", (20, 90), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
-            cv2.putText(image, str(counter), (20, 160), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), 3)
+            cv2.putText(image, str(counter), (20, 150), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 2.5, counter_color, 4)
             
-            # Stage
-            if stage:
-                stage_color = (0, 255, 0) if stage == "up" else (255, 165, 0)
-                cv2.putText(image, f"STAGE: {stage.upper()}", (20, 220), 
+            # Stage indicator
+            if stage and in_position:
+                if stage == "up":
+                    stage_color = (0, 255, 0)  # Green
+                    stage_text = "UP (EXTENDED)"
+                else:
+                    stage_color = (255, 165, 0)  # Orange
+                    stage_text = "DOWN (BENT)"
+                
+                cv2.putText(image, stage_text, (20, 200), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, stage_color, 2)
             
-            # Angles
-            cv2.putText(image, f"L: {left_angle:.0f}°", (20, h-80), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
-            cv2.putText(image, f"R: {right_angle:.0f}°", (20, h-50), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+            # Current angles
+            avg_angle = (left_angle + right_angle) / 2 if left_angle > 0 and right_angle > 0 else 0
             
-            # Position status
-            if exercise in ["pushups", "pullups"]:
-                if in_position:
-                    status_text = "READY TO COUNT ✓"
-                    status_color = (0, 255, 0)
-                else:
-                    if exercise == "pushups":
-                        status_text = "MOVE TO PUSH-UP"
-                    else:
-                        status_text = "ARMS NOT OVERHEAD"
-                    status_color = (0, 0, 255)
+            cv2.putText(image, "CURRENT ANGLES:", (20, h-120), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+            cv2.putText(image, f"Left: {left_angle:.0f}°", (20, h-90), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+            cv2.putText(image, f"Right: {right_angle:.0f}°", (20, h-60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+            cv2.putText(image, f"Avg: {avg_angle:.0f}°", (20, h-30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1)
+            
+            # Status box
+            status_color = (0, 255, 0) if in_position else (255, 100, 100)
+            cv2.rectangle(image, (15, 230), (ui_width-15, 300), (40, 40, 40), -1)
+            cv2.rectangle(image, (15, 230), (ui_width-15, 300), (100, 100, 100), 1)
+            
+            cv2.putText(image, "STATUS:", (20, 250), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 1)
+            
+            # Show feedback
+            if len(feedback) > 25:
+                cv2.putText(image, feedback[:25], (20, 275), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                if len(feedback) > 50:
+                    cv2.putText(image, feedback[25:50], (20, 295), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            else:
+                cv2.putText(image, feedback, (20, 275), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            
+            # Requirements for push-ups (with new thresholds)
+            if exercise == "pushups":
+                cv2.putText(image, "REQUIREMENTS:", (20, 310), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 255), 1)
+                cv2.putText(image, "Bend: Up to 100°", (20, 330), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 255), 1)
+                cv2.putText(image, "Extend: Above 130°", (20, 350), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 255), 1)
                 
-                cv2.putText(image, status_text, (20, 260), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
+                # Angle status indicator
+                if avg_angle > 0:
+                    if avg_angle < 100:
+                        angle_status = "GOOD BEND ✓"
+                        angle_color = (255, 165, 0)
+                    elif avg_angle > 130:
+                        angle_status = "GOOD EXTENSION ✓"
+                        angle_color = (0, 255, 0)
+                    else:
+                        angle_status = "MIDDLE RANGE"
+                        angle_color = (255, 255, 0)
+                    
+                    cv2.putText(image, angle_status, (20, 370), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, angle_color, 1)
             
-            # Draw landmarks if in position (or always for curls)
+            # Visual angle indicators on elbows
+            if left_angle > 10 and right_angle > 10:
+                try:
+                    # Get elbow positions
+                    left_elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value]
+                    right_elbow = landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW.value]
+                    
+                    le_x = int(left_elbow.x * w)
+                    le_y = int(left_elbow.y * h)
+                    re_x = int(right_elbow.x * w)
+                    re_y = int(right_elbow.y * h)
+                    
+                    # Determine color based on angle
+                    left_color = (255, 165, 0) if left_angle < 100 else (0, 255, 0) if left_angle > 130 else (255, 255, 0)
+                    right_color = (255, 165, 0) if right_angle < 100 else (0, 255, 0) if right_angle > 130 else (255, 255, 0)
+                    
+                    # Draw elbow indicators
+                    cv2.circle(image, (le_x, le_y), 10, left_color, -1)
+                    cv2.circle(image, (re_x, re_y), 10, right_color, -1)
+                    
+                    # Draw angle text
+                    cv2.putText(image, f"{left_angle:.0f}°", (le_x+15, le_y), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, left_color, 2)
+                    cv2.putText(image, f"{right_angle:.0f}°", (re_x+15, re_y), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, right_color, 2)
+                    
+                except:
+                    pass
+            
+            # Draw pose landmarks
             if results.pose_landmarks:
-                if exercise == "curls" or in_position:
-                    mp_drawing.draw_landmarks(
-                        image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
-                        mp_drawing.DrawingSpec(color=colors[exercise], thickness=2, circle_radius=2),
-                        mp_drawing.DrawingSpec(color=(200, 200, 200), thickness=2, circle_radius=2)
-                    )
+                mp_drawing.draw_landmarks(
+                    image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
+                    mp_drawing.DrawingSpec(color=colors[exercise], thickness=2, circle_radius=2),
+                    mp_drawing.DrawingSpec(color=(100, 100, 100), thickness=1, circle_radius=1)
+                )
             
             # Instruction
             cv2.putText(image, "Press Q to quit", (w-150, h-20), 
@@ -384,7 +476,8 @@ def run_exercise_counter(exercise):
 
 def main():
     print("="*50)
-    print("EXERCISE COUNTER")
+    print("PRACTICAL PUSH-UP COUNTER")
+    print("Bend up to 100°, Extend above 130°")
     print("="*50)
     
     while True:
