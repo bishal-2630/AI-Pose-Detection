@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Pose Estimation - Bicep Curl Counter</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 AI Pose Estimation</h1>
+            <p class="subtitle">Bicep Curl Counter with MediaPipe & Python API</p>
+        </header>
+
+        <div class="content">
+            <!-- Left Column: Video Feed -->
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="webcam" autoplay playsinline></video>
+                    <div class="angle-overlay">
+                        <span id="angleDisplay">Angle: --°</span>
+                        <span id="apiStatus" class="api-status">API: Ready</span>
+                    </div>
+                    <div class="processing-mode">
+                        <span id="processingMode">Processing Mode: API</span>
+                    </div>
+                </div>
+
+                <div class="instructions">
+                    <h3>📋 Instructions:</h3>
+                    <ol>
+                        <li>Allow camera access when prompted</li>
+                        <li>Stand 2-3 meters from camera</li>
+                        <li>Ensure good lighting</li>
+                        <li>Perform bicep curls with right arm</li>
+                        <li>Keep your whole body visible</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Right Column: Stats & Controls -->
+            <div class="stats-section">
+                <!-- Stats Card -->
+                <div class="stats-card">
+                    <h2>📊 Statistics</h2>
+
+                    <div class="stat">
+                        <div class="stat-label">Total Reps</div>
+                        <div class="stat-value" id="counter">0</div>
+                    </div>
+
+                    <div class="stat">
+                        <div class="stat-label">Current Stage</div>
+                        <div class="stage-indicator">
+                            <span id="stageText">Waiting...</span>
+                        </div>
+                    </div>
+
+                    <div class="stat">
+                        <div class="stat-label">Arm Angle</div>
+                        <div class="angle-value" id="angleValue">--°</div>
+                    </div>
+                </div>
+
+                <!-- Controls Card -->
+                <div class="controls-card">
+                    <h2>⚙️ Controls</h2>
+
+                    <div class="controls">
+                        <button id="resetBtn" class="btn btn-reset">
+                            <span class="btn-icon">🔄</span>
+                            Reset Counter
+                        </button>
+
+                        <button id="cameraBtn" class="btn btn-camera">
+                            <span class="btn-icon">📸</span>
+                            Toggle Camera
+                        </button>
+
+                        <button id="apiToggle" class="btn btn-api">
+                            <span class="btn-icon">🌐</span>
+                            Switch to Local
+                        </button>
+                    </div>
+
+                    <div class="status-grid">
+                        <div class="status-item">
+                            <span class="status-label">Camera:</span>
+                            <span class="status-value" id="cameraStatus">Initializing...</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">API Latency:</span>
+                            <span class="status-value" id="apiLatency">-- ms</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">FPS:</span>
+                            <span class="status-value" id="fpsCounter">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Info Card -->
+                <div class="info-card">
+                    <h2>ℹ️ System Info</h2>
+                    <ul>
+                        <li><strong>Backend:</strong> Python + OpenCV + MediaPipe</li>
+                        <li><strong>Frontend:</strong> HTML5 Camera API</li>
+                        <li><strong>Processing:</strong> Serverless API on Vercel</li>
+                        <li><strong>Detection:</strong> Real-time pose estimation</li>
+                        <li><strong>Privacy:</strong> Images processed on server, not stored</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Built with Python + MediaPipe | Deployed on Vercel Serverless</p>
+            <p class="footer-note">Note: First request may be slow due to serverless cold start</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

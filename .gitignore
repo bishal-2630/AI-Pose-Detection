@@ -1,29 +1,27 @@
-# Virtual environments - EVERYTHING
-venv/
-pose_env/
-env/
-.venv/
-ENV/
-env.bak/
-venv.bak/
-**/venv/
-**/.venv/
-**/pose_env/
-
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
-# VS Code
-.vscode/
-*.code-workspace
-
-# OS
-.DS_Store
-Thumbs.db
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.log
