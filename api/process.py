@@ -1,15 +1,28 @@
+# api/process.py
 from http.server import BaseHTTPRequestHandler
-import cv2
-import mediapipe as mp
-import numpy as np
-import base64
 import json
+import base64
 import traceback
 
-mp_pose = mp.solutions.pose
+try:
+    import cv2
+    import numpy as np
+    import mediapipe as mp
+    
+    # Initialize MediaPipe
+    mp_pose = mp.solutions.pose
+    HAS_MEDIAPIPE = True
+except ImportError as e:
+    print(f"Import error: {e}")
+    HAS_MEDIAPIPE = False
+    cv2 = None
+    np = None
+    mp = None
 
 def calculate_angle(a, b, c):
-    """Calculate angle between three points"""
+    if np is None:
+        return 0
+    
     a = np.array(a)
     b = np.array(b)
     c = np.array(c)
@@ -23,13 +36,21 @@ def calculate_angle(a, b, c):
     return angle
 
 class handler(BaseHTTPRequestHandler):
-    def do_OPTIONS(self):
-        """Handle CORS preflight requests"""
+    def do_GET(self):
+        """Test endpoint - check if API is running"""
         self.send_response(200)
+        self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
+        
+        response = {
+            'status': 'API is running',
+            'mediapipe_available': HAS_MEDIAPIPE,
+            'endpoint': '/api/process',
+            'method': 'POST',
+            'usage': 'Send POST request with {"image": "base64_data", "counter": 0, "stage": null}'
+        }
+        self.wfile.write(json.dumps(response).encode())
     
     def do_POST(self):
         """Process image and return pose data"""
@@ -46,9 +67,18 @@ class handler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data)
             
-            # Validate required fields
-            if 'image' not in data:
-                self.send_error(400, "No image data provided")
+            # Check if MediaPipe is available
+            if not HAS_MEDIAPIPE:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': False,
+                    'error': 'MediaPipe not installed',
+                    'angle': 0,
+                    'counter': data.get('counter', 0),
+                    'stage': data.get('stage', None)
+                }).encode())
                 return
             
             # Decode base64 image
@@ -61,8 +91,7 @@ class handler(BaseHTTPRequestHandler):
             image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
             if image is None:
-                self.send_error(400, "Invalid image data")
-                return
+                raise ValueError("Failed to decode image")
             
             # Get current state
             current_counter = data.get('counter', 0)
@@ -74,8 +103,7 @@ class handler(BaseHTTPRequestHandler):
             
             with mp_pose.Pose(
                 min_detection_confidence=0.5,
-                min_tracking_confidence=0.5,
-                model_complexity=1
+                min_tracking_confidence=0.5
             ) as pose:
                 
                 # Convert to RGB
@@ -125,18 +153,25 @@ class handler(BaseHTTPRequestHandler):
             # Send response
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps(response).encode())
             
         except json.JSONDecodeError:
-            self.send_error(400, "Invalid JSON data")
+            self.send_response(400)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'success': False,
+                'error': 'Invalid JSON data',
+                'angle': 0,
+                'counter': 0,
+                'stage': None
+            }).encode())
         except Exception as e:
             print(f"Error: {str(e)}")
             print(traceback.format_exc())
             self.send_response(500)
             self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             error_response = {
                 'success': False,
@@ -146,3 +181,11 @@ class handler(BaseHTTPRequestHandler):
                 'stage': None
             }
             self.wfile.write(json.dumps(error_response).encode())
+    
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
