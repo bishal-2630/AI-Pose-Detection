@@ -11,46 +11,47 @@
 <body>
     <div class="container">
         <header>
-            <h1>🤸 Bicep Curl Counter</h1>
-            <p class="subtitle">Real-time dual arm tracking with proper rep counting</p>
-
-            <!-- Mobile-friendly summary display -->
-            <div class="mobile-summary">
-                <div class="summary-item">
-                    <span class="summary-label">Left Angle</span>
-                    <span id="mobileLeftAngle" class="summary-value angle-left">--°</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Right Angle</span>
-                    <span id="mobileRightAngle" class="summary-value angle-right">--°</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Points Detected</span>
-                    <span id="mobileTotalPoints" class="summary-value">0</span>
-                </div>
-            </div>
+            <h1>🤸 Full Body Pose Detection</h1>
+            <p class="subtitle">Real-time dual arm angle tracking with correct left/right mapping</p>
         </header>
 
         <div class="content">
             <!-- Video Feed -->
             <div class="video-section">
                 <div class="video-container">
-                    <!-- Mirror view -->
-                    <video id="webcam" autoplay playsinline muted style="transform: scaleX(-1);"></video>
+                    <!-- Remove scaleX(-1) transform to fix mirror issue -->
+                    <video id="webcam" autoplay playsinline muted></video>
                     <canvas id="overlayCanvas"></canvas>
-                    <div class="camera-status" id="cameraStatus">
-                        Starting camera...
+
+                    <div class="overlay-display">
+                        <div class="angle-display-group">
+                            <div class="angle-display-left">
+                                <span class="angle-label">Left Arm</span>
+                                <span id="leftAngleDisplay" class="angle-value">--°</span>
+                            </div>
+                            <div class="angle-display-right">
+                                <span class="angle-label">Right Arm</span>
+                                <span id="rightAngleDisplay" class="angle-value">--°</span>
+                            </div>
+                        </div>
+                        <div class="detection-info">
+                            <span id="landmarkCount" class="landmark-count">Points: 0/33</span>
+                            <span id="poseStatus" class="pose-status">Initializing...</span>
+                        </div>
                     </div>
-                    <!-- Reps counter is now drawn directly on canvas at top-left -->
                 </div>
 
                 <div class="controls-panel">
                     <div class="counter-display">
-                        <div class="counter-title">Bicep Curl Reps</div>
+                        <div class="counter-title">Bicep Curls</div>
                         <div class="counter-group">
-                            <div class="counter-item total-reps">
-                                <span class="counter-label">Total Reps:</span>
-                                <span id="totalCounter" class="counter-value">0</span>
+                            <div class="counter-item">
+                                <span class="counter-label">Left:</span>
+                                <span id="leftCounter" class="counter-value">0</span>
+                            </div>
+                            <div class="counter-item">
+                                <span class="counter-label">Right:</span>
+                                <span id="rightCounter" class="counter-value">0</span>
                             </div>
                         </div>
                     </div>
@@ -77,7 +78,7 @@
                     <div class="angles-display">
                         <div class="angle-gauge left-angle">
                             <div class="gauge-header">
-                                <span class="arm-label">Left Arm Angle</span>
+                                <span class="arm-label">Left Arm</span>
                                 <span id="leftAngleValue" class="angle-text">--°</span>
                             </div>
                             <div class="gauge-circle">
@@ -94,7 +95,7 @@
 
                         <div class="angle-gauge right-angle">
                             <div class="gauge-header">
-                                <span class="arm-label">Right Arm Angle</span>
+                                <span class="arm-label">Right Arm</span>
                                 <span id="rightAngleValue" class="angle-text">--°</span>
                             </div>
                             <div class="gauge-circle">
@@ -163,11 +164,11 @@
                     <div class="legend-grid">
                         <div class="legend-item">
                             <span class="legend-dot" style="background: #FF6B6B;"></span>
-                            <span class="legend-text">Left Arm (Screen)</span>
+                            <span class="legend-text">Left Side Points</span>
                         </div>
                         <div class="legend-item">
                             <span class="legend-dot" style="background: #4CC9F0;"></span>
-                            <span class="legend-text">Right Arm (Screen)</span>
+                            <span class="legend-text">Right Side Points</span>
                         </div>
                         <div class="legend-item">
                             <span class="legend-dot" style="background: #FFD166;"></span>
@@ -181,20 +182,22 @@
                             <span class="legend-dot" style="background: #118AB2;"></span>
                             <span class="legend-text">Skeleton Lines</span>
                         </div>
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background: #EF476F;"></span>
+                            <span class="legend-text">Active Arm</span>
+                        </div>
                     </div>
                     <div class="legend-note">
-                        <p>💡 <strong>Rep Counting:</strong> Each arm curl counts as 1 rep</p>
-                        <p>🔴 <strong>Left Arm</strong> = Red dots & lines on screen</p>
-                        <p>🔵 <strong>Right Arm</strong> = Blue dots & lines on screen</p>
-                        <p>🟡 <strong>Center Points</strong> = Yellow dots (nose, hips)</p>
+                        <p>💡 <strong>Note:</strong> Left/right are now correctly mapped to your actual body sides</p>
+                        <p>Both elbow angles are calculated and displayed in real-time</p>
                     </div>
                 </div>
             </div>
         </div>
 
         <footer>
-            <p>Dual Arm Angle Tracking | Single Hand Rep Counting | Mirror View</p>
-            <p class="footer-note">Each arm movement counts as 1 rep - Total reps displayed on screen</p>
+            <p>Dual Arm Angle Tracking | Correct Left/Right Mapping | Real-time Pose Estimation</p>
+            <p class="footer-note">Shows angles for both elbows with individual curl counting</p>
         </footer>
     </div>
 
