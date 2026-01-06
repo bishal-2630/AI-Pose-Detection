@@ -1,4 +1,4 @@
-// script.js - Mirror view with correct rep counting
+// script.js - Mirror view with correct rep counting - Fixed camera issue
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
@@ -33,11 +33,11 @@ const apiToggleBtn = document.getElementById('apiToggle');
 
 // State variables
 let totalReps = 0;
-let leftStageState = null;
-let rightStageState = null;
+let leftArmState = { stage: null, hasCounted: false };
+let rightArmState = { stage: null, hasCounted: false };
 let leftArmAngle = 0;
 let rightArmAngle = 0;
-let useAPI = true;
+let useAPI = false; // Default to browser mode
 let pose = null;
 let camera = null;
 let mediaStream = null;
@@ -45,6 +45,7 @@ let frameCount = 0;
 let fps = 0;
 let landmarks = null;
 let detectionConfidence = 0;
+let isInitialized = false;
 
 // Colors for mirror view (screen perspective)
 const COLORS = {
@@ -76,7 +77,7 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_ELBOW],
     [LANDMARK_INDICES.RIGHT_ELBOW, LANDMARK_INDICES.RIGHT_WRIST],
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_HIP],
-    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_HIP],
+    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDices.RIGHT_HIP],
     [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.RIGHT_HIP]
 ];
 
@@ -86,10 +87,10 @@ async function initializeMediaPipe() {
     try {
         updateStatus('Loading pose detection...');
         
-        // Load MediaPipe
+        // Load MediaPipe dynamically
         if (typeof window.Pose === 'undefined') {
-            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');
-            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
+            console.log('Loading MediaPipe scripts...');
+            await loadMediaPipeScripts();
         }
         
         // Initialize MediaPipe Pose
@@ -109,24 +110,41 @@ async function initializeMediaPipe() {
         
         pose.onResults(onPoseResults);
         
-        updateStatus('Ready for detection');
+        console.log('MediaPipe initialized successfully');
+        updateStatus('MediaPipe loaded');
         return true;
         
     } catch (error) {
-        console.error('MediaPipe error:', error);
-        updateStatus('Failed to initialize');
+        console.error('MediaPipe initialization error:', error);
+        updateStatus('Failed to initialize MediaPipe');
         return false;
     }
 }
 
-function loadScript(src) {
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
+async function loadMediaPipeScripts() {
+    const scripts = [
+        'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js',
+        'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js'
+    ];
+    
+    const loadPromises = scripts.map(src => {
+        return new Promise((resolve, reject) => {
+            // Check if script is already loaded
+            if (document.querySelector(`script[src="${src}"]`)) {
+                resolve();
+                return;
+            }
+            
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
     });
+    
+    await Promise.all(loadPromises);
+    console.log('All MediaPipe scripts loaded');
 }
 
 // ==================== POSE DETECTION & VISUALIZATION ====================
@@ -158,6 +176,7 @@ function onPoseResults(results) {
 }
 
 function countDetectedLandmarks(landmarks) {
+    if (!landmarks) return 0;
     return landmarks.filter(landmark => 
         landmark && landmark.visibility && landmark.visibility > 0.1
     ).length;
@@ -172,6 +191,8 @@ function calculateConfidence(results) {
 }
 
 function drawSkeleton(results) {
+    if (!results.poseLandmarks) return;
+    
     const videoWidth = overlayCanvas.width;
     const videoHeight = overlayCanvas.height;
     
@@ -358,6 +379,8 @@ function clearCanvas() {
 // ==================== ARM ANGLE CALCULATION ====================
 
 function calculateArmAngles(landmarks) {
+    if (!landmarks) return;
+    
     // Calculate left arm angle (screen left = person's right)
     const leftShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const leftElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
@@ -410,10 +433,6 @@ function calculateAngle(a, b, c) {
     return angle;
 }
 
-// Track curl states for each arm
-let leftArmState = { stage: null, hasCounted: false };
-let rightArmState = { stage: null, hasCounted: false };
-
 function countCurl(angle, arm) {
     let state = arm === 'left' ? leftArmState : rightArmState;
     let color = arm === 'left' ? '#FF6B6B' : '#4CC9F0';
@@ -464,8 +483,8 @@ function updateLeftArmUI(angle, visible = true) {
     leftAngleValue.textContent = `${roundedAngle}°`;
     mobileLeftAngle.textContent = `${roundedAngle}°`;
     
-    if (visible) {
-        const circlePercent = (angle / 180) * 360;
+    if (visible && angle > 0) {
+        const circlePercent = Math.min((angle / 180) * 360, 360);
         leftAngleFill.style.background = 
             `conic-gradient(from 0deg, #FF6B6B 0deg, #FF6B6B ${circlePercent}deg, transparent ${circlePercent}deg, transparent 360deg)`;
     }
@@ -476,8 +495,8 @@ function updateRightArmUI(angle, visible = true) {
     rightAngleValue.textContent = `${roundedAngle}°`;
     mobileRightAngle.textContent = `${roundedAngle}°`;
     
-    if (visible) {
-        const circlePercent = (angle / 180) * 360;
+    if (visible && angle > 0) {
+        const circlePercent = Math.min((angle / 180) * 360, 360);
         rightAngleFill.style.background = 
             `conic-gradient(from 0deg, #4CC9F0 0deg, #4CC9F0 ${circlePercent}deg, transparent ${circlePercent}deg, transparent 360deg)`;
     }
@@ -497,17 +516,23 @@ function updateCounters() {
 }
 
 function animateLeftRep() {
-    document.querySelector('.left-angle').classList.add('highlight-active');
-    setTimeout(() => {
-        document.querySelector('.left-angle').classList.remove('highlight-active');
-    }, 1000);
+    const leftGauge = document.querySelector('.left-angle');
+    if (leftGauge) {
+        leftGauge.classList.add('highlight-active');
+        setTimeout(() => {
+            leftGauge.classList.remove('highlight-active');
+        }, 1000);
+    }
 }
 
 function animateRightRep() {
-    document.querySelector('.right-angle').classList.add('highlight-active');
-    setTimeout(() => {
-        document.querySelector('.right-angle').classList.remove('highlight-active');
-    }, 1000);
+    const rightGauge = document.querySelector('.right-angle');
+    if (rightGauge) {
+        rightGauge.classList.add('highlight-active');
+        setTimeout(() => {
+            rightGauge.classList.remove('highlight-active');
+        }, 1000);
+    }
 }
 
 function updateLandmarkStats(count) {
@@ -559,8 +584,6 @@ function resetAll() {
     totalReps = 0;
     leftArmState = { stage: null, hasCounted: false };
     rightArmState = { stage: null, hasCounted: false };
-    leftStageState = null;
-    rightStageState = null;
     
     updateCounters();
     updateStageUI(leftStage, leftStageText, '--', '#a0a0c0');
@@ -582,17 +605,17 @@ function resetAll() {
 
 async function startCamera() {
     try {
-        updateStatus('Starting camera...');
+        updateStatus('Requesting camera access...');
         
-        await initializeMediaPipe();
-        
+        // First get camera access
         mediaStream = await navigator.mediaDevices.getUserMedia({
             video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
+                width: { ideal: 640 },
+                height: { ideal: 480 },
                 facingMode: 'user',
                 frameRate: { ideal: 30 }
-            }
+            },
+            audio: false
         });
         
         videoElement.srcObject = mediaStream;
@@ -600,35 +623,106 @@ async function startCamera() {
         // Apply mirror effect
         videoElement.style.transform = 'scaleX(-1)';
         
+        // Wait for video to be ready
         await new Promise((resolve) => {
-            videoElement.onloadedmetadata = resolve;
+            videoElement.onloadedmetadata = () => {
+                console.log('Video ready. Dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+                resolve();
+            };
         });
         
-        // Set canvas size
+        // Set canvas size to match video
         overlayCanvas.width = videoElement.videoWidth;
         overlayCanvas.height = videoElement.videoHeight;
         
-        // Start camera processing
-        camera = new window.Camera(videoElement, {
-            onFrame: async () => {
-                if (pose) {
-                    await pose.send({ image: videoElement });
-                }
-            },
-            width: videoElement.videoWidth,
-            height: videoElement.videoHeight
-        });
+        updateStatus('Camera ready. Initializing pose detection...');
         
-        await camera.start();
-        updateStatus('Ready - Move your arms!');
+        // Initialize MediaPipe
+        const mediaPipeReady = await initializeMediaPipe();
+        if (!mediaPipeReady) {
+            throw new Error('Failed to initialize MediaPipe');
+        }
         
-        // Start FPS counter
-        startFPSCounter();
+        // Start camera processing with MediaPipe
+        if (window.Camera) {
+            camera = new window.Camera(videoElement, {
+                onFrame: async () => {
+                    if (pose && isInitialized) {
+                        try {
+                            await pose.send({ image: videoElement });
+                        } catch (error) {
+                            console.error('Error sending frame to pose:', error);
+                        }
+                    }
+                },
+                width: videoElement.videoWidth,
+                height: videoElement.videoHeight
+            });
+            
+            await camera.start();
+            isInitialized = true;
+            updateStatus('Ready! Move your arms for bicep curls');
+            console.log('Camera and pose detection started successfully');
+            
+            // Start FPS counter
+            startFPSCounter();
+            
+        } else {
+            // Fallback: Use requestAnimationFrame for older browsers
+            console.log('Using fallback camera processing');
+            updateStatus('Using fallback mode');
+            startFallbackCamera();
+        }
         
     } catch (error) {
         console.error('Camera error:', error);
-        updateStatus('Camera access required');
+        if (error.name === 'NotAllowedError') {
+            updateStatus('Camera access denied. Please allow camera access.');
+        } else if (error.name === 'NotFoundError') {
+            updateStatus('No camera found. Please connect a camera.');
+        } else {
+            updateStatus(`Camera error: ${error.message}`);
+        }
+        
+        // Show fallback message
+        showCameraFallback();
     }
+}
+
+function startFallbackCamera() {
+    isInitialized = true;
+    function processFrame() {
+        if (pose && isInitialized) {
+            pose.send({ image: videoElement })
+                .catch(error => console.error('Pose processing error:', error));
+        }
+        requestAnimationFrame(processFrame);
+    }
+    processFrame();
+}
+
+function showCameraFallback() {
+    // Create a fallback test pattern if camera fails
+    const fallbackMessage = document.createElement('div');
+    fallbackMessage.className = 'camera-fallback';
+    fallbackMessage.innerHTML = `
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+            <div style="font-size: 48px;">📷</div>
+            <h3>Camera Access Required</h3>
+            <p>Please allow camera access to use pose detection</p>
+            <button id="retryCamera" style="margin-top: 20px; padding: 10px 20px; background: #4CC9F0; border: none; border-radius: 5px; color: white; cursor: pointer;">
+                Retry Camera
+            </button>
+        </div>
+    `;
+    
+    const videoContainer = document.querySelector('.video-container');
+    videoContainer.appendChild(fallbackMessage);
+    
+    document.getElementById('retryCamera').addEventListener('click', () => {
+        fallbackMessage.remove();
+        startCamera();
+    });
 }
 
 function startFPSCounter() {
@@ -661,20 +755,43 @@ totalCounterElement.addEventListener('click', () => {
 // ==================== INITIALIZATION ====================
 
 window.addEventListener('DOMContentLoaded', async () => {
-    console.log('Starting Pose Detection - Single Hand Rep Counting...');
+    console.log('Starting Pose Detection...');
     
-    await startCamera();
+    // Update processing mode display
     updateProcessingMode();
     
-    console.log('System ready - Each arm curl counts as 1 rep');
+    // Start camera
+    await startCamera();
+    
+    console.log('System initialized successfully');
 });
 
 // Cleanup
 window.addEventListener('beforeunload', () => {
     if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream.getTracks().forEach(track => {
+            track.stop();
+            console.log('Stopped track:', track.kind);
+        });
     }
     if (camera) {
-        camera.stop();
+        try {
+            camera.stop();
+            console.log('Camera stopped');
+        } catch (error) {
+            console.log('Camera already stopped');
+        }
+    }
+    isInitialized = false;
+});
+
+// Handle page visibility change
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        console.log('Page hidden - pausing detection');
+        isInitialized = false;
+    } else {
+        console.log('Page visible - resuming detection');
+        isInitialized = true;
     }
 });
