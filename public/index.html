@@ -4,15 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Bicep Curl Counter</title>
+    <title>AI Bicep Curl Counter - Full Body Landmarks</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <div class="container">
         <header>
-            <h1>🏋️ AI Bicep Curl Counter</h1>
-            <p class="subtitle">Real-time pose detection with skeleton visualization</p>
+            <h1>🦴 Full Body Pose Detection</h1>
+            <p class="subtitle">33 Landmark Points with Complete Skeleton Visualization</p>
         </header>
 
         <div class="content">
@@ -29,116 +29,173 @@
                                 <div class="angle-progress" id="angleProgress"></div>
                             </div>
                         </div>
-                        <div class="status-info">
+                        <div class="stats-info">
+                            <span id="landmarkCount" class="landmark-count">Landmarks: 0/33</span>
                             <span id="poseStatus" class="pose-status">Detecting...</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="quick-instructions">
-                    <h3>📋 How to use:</h3>
-                    <ol>
-                        <li>Allow camera access</li>
-                        <li>Stand facing camera</li>
-                        <li>Perform bicep curls</li>
-                        <li>Keep your right arm visible</li>
-                    </ol>
+                <div class="landmarks-info">
+                    <h3>📍 MediaPipe Landmarks (33 Points)</h3>
+                    <div class="landmark-groups">
+                        <div class="landmark-group">
+                            <h4>Face & Head (0-10)</h4>
+                            <div class="landmark-list">
+                                <span>0: Nose</span>
+                                <span>1-2: Eyes</span>
+                                <span>3-4: Ears</span>
+                                <span>5-10: Mouth</span>
+                            </div>
+                        </div>
+                        <div class="landmark-group">
+                            <h4>Upper Body (11-16)</h4>
+                            <div class="landmark-list">
+                                <span>11-12: Shoulders</span>
+                                <span>13-14: Elbows</span>
+                                <span>15-16: Wrists</span>
+                            </div>
+                        </div>
+                        <div class="landmark-group">
+                            <h4>Lower Body (23-32)</h4>
+                            <div class="landmark-list">
+                                <span>23-24: Hips</span>
+                                <span>25-26: Knees</span>
+                                <span>27-28: Ankles</span>
+                                <span>29-32: Heels/Toes</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Stats Panel -->
+            <!-- Stats & Controls -->
             <div class="stats-panel">
                 <!-- Counter Display -->
                 <div class="counter-card">
-                    <h2>📊 Rep Counter</h2>
+                    <h2>🏋️ Bicep Curl Counter</h2>
                     <div class="counter-display">
                         <div class="counter-value" id="counter">0</div>
-                        <div class="counter-label">REPS</div>
+                        <div class="counter-label">REPETITIONS</div>
+                    </div>
+
+                    <div class="arm-angle">
+                        <div class="angle-gauge">
+                            <div class="angle-circle">
+                                <div class="angle-circle-fill" id="angleCircleFill"></div>
+                                <div class="angle-circle-text" id="angleValue">--°</div>
+                            </div>
+                        </div>
+                        <div class="angle-label">Right Arm Angle</div>
                     </div>
 
                     <div class="counter-controls">
-                        <button id="resetBtn" class="btn btn-reset" aria-label="Reset counter">
+                        <button id="resetBtn" class="btn btn-reset">
                             <span class="btn-icon">🔄</span>
                             <span class="btn-text">Reset Counter</span>
                         </button>
 
-                        <button id="apiToggle" class="btn btn-api" aria-label="Toggle processing mode">
+                        <button id="apiToggle" class="btn btn-api">
                             <span class="btn-icon">🌐</span>
                             <span class="btn-text">API Mode: ON</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Real-time Stats -->
-                <div class="real-time-stats">
-                    <h2>⚡ Live Metrics</h2>
+                <!-- Real-time Detection Stats -->
+                <div class="detection-stats">
+                    <h2>📈 Detection Statistics</h2>
 
-                    <div class="metrics-grid">
-                        <div class="metric">
-                            <div class="metric-label">Arm Angle</div>
-                            <div class="metric-value" id="angleValue">--°</div>
-                            <div class="metric-bar">
-                                <div class="metric-fill" id="angleBar"></div>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Detected Landmarks</div>
+                            <div class="stat-value" id="detectedLandmarks">0</div>
+                            <div class="stat-bar">
+                                <div class="stat-fill" id="landmarkBar"></div>
                             </div>
+                            <div class="stat-sub">out of 33 points</div>
                         </div>
 
-                        <div class="metric">
-                            <div class="metric-label">Current Stage</div>
-                            <div class="metric-stage">
+                        <div class="stat-box">
+                            <div class="stat-label">Current Stage</div>
+                            <div class="stage-display">
                                 <span id="stageText" class="stage-text">Waiting</span>
                                 <div class="stage-indicator" id="stageIndicator"></div>
                             </div>
+                            <div class="stage-hint" id="stageHint">Perform bicep curls</div>
                         </div>
 
-                        <div class="metric">
-                            <div class="metric-label">Processing</div>
-                            <div class="metric-value" id="processingMode">API</div>
-                            <div class="metric-sub" id="apiLatency">Latency: --ms</div>
+                        <div class="stat-box">
+                            <div class="stat-label">Processing Mode</div>
+                            <div class="mode-display">
+                                <span id="processingMode" class="mode-text">Python API</span>
+                                <div class="mode-detail" id="apiLatency">Latency: -- ms</div>
+                            </div>
+                            <div class="mode-hint" id="processingHint">Real-time analysis</div>
                         </div>
 
-                        <div class="metric">
-                            <div class="metric-label">Performance</div>
-                            <div class="metric-value" id="fpsCounter">-- FPS</div>
-                            <div class="metric-sub" id="detectionStatus">Ready</div>
+                        <div class="stat-box">
+                            <div class="stat-label">Performance</div>
+                            <div class="performance-display">
+                                <span id="fpsCounter" class="fps-text">-- FPS</span>
+                                <div class="confidence-display">
+                                    <span>Confidence: </span>
+                                    <span id="confidenceValue">--%</span>
+                                </div>
+                            </div>
+                            <div class="performance-hint" id="performanceHint">Smooth tracking</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Skeleton Preview -->
-                <div class="skeleton-preview">
-                    <h2>🦴 Skeleton Detection</h2>
-                    <div class="skeleton-info">
-                        <div class="landmark-points">
-                            <div class="landmark shoulder">
-                                <span class="landmark-dot" style="background: #4cc9f0;"></span>
-                                <span class="landmark-label">Shoulder</span>
+                <!-- Skeleton Connections Map -->
+                <div class="skeleton-map">
+                    <h2>🦴 Skeleton Connections</h2>
+                    <div class="connections-info">
+                        <div class="connections-grid">
+                            <div class="connection-group">
+                                <h4>Face & Head Lines</h4>
+                                <div class="connection-list">
+                                    <div class="connection-item">Nose → Left Eye</div>
+                                    <div class="connection-item">Nose → Right Eye</div>
+                                    <div class="connection-item">Left Eye → Left Ear</div>
+                                    <div class="connection-item">Right Eye → Right Ear</div>
+                                    <div class="connection-item">Mouth → Left Eye</div>
+                                    <div class="connection-item">Mouth → Right Eye</div>
+                                </div>
                             </div>
-                            <div class="landmark elbow">
-                                <span class="landmark-dot" style="background: #ff6b6b;"></span>
-                                <span class="landmark-label">Elbow</span>
+
+                            <div class="connection-group">
+                                <h4>Upper Body Lines</h4>
+                                <div class="connection-list">
+                                    <div class="connection-item">Shoulder → Shoulder</div>
+                                    <div class="connection-item">Shoulder → Elbow</div>
+                                    <div class="connection-item">Elbow → Wrist</div>
+                                    <div class="connection-item">Shoulder → Hip</div>
+                                    <div class="connection-item">Hip → Hip</div>
+                                </div>
                             </div>
-                            <div class="landmark wrist">
-                                <span class="landmark-dot" style="background: #ffd166;"></span>
-                                <span class="landmark-label">Wrist</span>
+
+                            <div class="connection-group">
+                                <h4>Lower Body Lines</h4>
+                                <div class="connection-list">
+                                    <div class="connection-item">Hip → Knee</div>
+                                    <div class="connection-item">Knee → Ankle</div>
+                                    <div class="connection-item">Ankle → Heel</div>
+                                    <div class="connection-item">Ankle → Toe</div>
+                                    <div class="connection-item">Heel → Toe</div>
+                                </div>
                             </div>
                         </div>
-                        <div class="connection-lines">
-                            <div class="connection" style="border-color: #4cc9f0;">
-                                <span>Shoulder → Elbow</span>
-                            </div>
-                            <div class="connection" style="border-color: #ff6b6b;">
-                                <span>Elbow → Wrist</span>
-                            </div>
-                        </div>
+                        <p class="map-note">All 33 landmark points and skeleton connections are drawn in real-time</p>
                     </div>
-                    <p class="skeleton-note">Skeleton lines and points are drawn in real-time over your video feed</p>
                 </div>
             </div>
         </div>
 
         <footer>
-            <p>Real-time pose estimation with MediaPipe | Python API backend</p>
-            <p class="footer-note">Automatically draws skeleton lines and landmarks when body is detected</p>
+            <p>Full Body Pose Detection with MediaPipe 33 Landmark Points | Real-time Skeleton Visualization</p>
+            <p class="footer-note">Displays complete human pose with all anatomical landmarks</p>
         </footer>
     </div>
 
