@@ -1,4 +1,4 @@
-// script.js - FIXED left/right mapping issue
+// script.js - FIXED landmarks and skeleton rendering
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
@@ -50,6 +50,7 @@ let fps = 0;
 let landmarks = null;
 let detectionConfidence = 0;
 let repInProgress = false;
+let lastTime = 0;
 
 // Colors for correct left/right mapping (person's perspective)
 const COLORS = {
@@ -145,6 +146,24 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.RIGHT_ANKLE, LANDMARK_INDICES.RIGHT_HEEL]
 ];
 
+// ==================== HELPER FUNCTIONS ====================
+
+// Convert normalized coordinates to canvas coordinates with mirroring
+function flipX(x, width) {
+    return width - x * width;
+}
+
+function flipY(y, height) {
+    return y * height;
+}
+
+// Calculate distance between two points
+function distance(point1, point2) {
+    const dx = point1.x - point2.x;
+    const dy = point1.y - point2.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
 // ==================== MEDIAPIPE INITIALIZATION ====================
 
 async function initializeMediaPipe() {
@@ -197,6 +216,8 @@ function loadScript(src) {
 // ==================== POSE DETECTION & VISUALIZATION ====================
 
 function onPoseResults(results) {
+    const startTime = performance.now();
+    
     if (results.poseLandmarks) {
         landmarks = results.poseLandmarks;
         detectionConfidence = calculateConfidence(results);
@@ -205,13 +226,18 @@ function onPoseResults(results) {
         const detectedCount = countDetectedLandmarks(landmarks);
         updateLandmarkStats(detectedCount);
 
-        // Draw skeleton with correct left/right mapping
+        // Clear and draw skeleton with correct left/right mapping
+        clearCanvas();
         drawSkeleton(results);
 
         // Calculate and display both arm angles
         calculateArmAngles(landmarks);
 
         updateStatus(`${detectedCount} points detected`);
+        
+        // Update latency
+        const latency = Math.round(performance.now() - startTime);
+        updateLatency(latency);
     } else {
         landmarks = null;
         clearCanvas();
@@ -240,13 +266,10 @@ function drawSkeleton(results) {
     const videoWidth = overlayCanvas.width;
     const videoHeight = overlayCanvas.height;
 
-    // Clear canvas
-    canvasCtx.clearRect(0, 0, videoWidth, videoHeight);
-
-    // Draw all connections
+    // Draw all connections first
     drawConnections(results.poseLandmarks, videoWidth, videoHeight);
 
-    // Draw all landmarks
+    // Draw all landmarks on top
     drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
 
     // Draw arm angles
@@ -254,6 +277,8 @@ function drawSkeleton(results) {
 }
 
 function drawConnections(landmarks, width, height) {
+    if (!landmarks) return;
+    
     canvasCtx.lineWidth = 3;
     canvasCtx.lineCap = 'round';
 
@@ -265,8 +290,8 @@ function drawConnections(landmarks, width, height) {
             // Determine color based on side (person's perspective)
             let color = COLORS.connections;
 
-            // Person's left side
-            if (startIdx === LANDMARK_INDICES.LEFT_SHOULDER ||
+            // Person's left side connections
+            if (startIdx === LANDMARK_INDICES.LEFT_SHOULDER || 
                 startIdx === LANDMARK_INDICES.LEFT_ELBOW ||
                 startIdx === LANDMARK_INDICES.LEFT_WRIST ||
                 startIdx === LANDMARK_INDICES.LEFT_HIP ||
@@ -278,22 +303,22 @@ function drawConnections(landmarks, width, height) {
                 endIdx === LANDMARK_INDICES.LEFT_HIP ||
                 endIdx === LANDMARK_INDICES.LEFT_KNEE ||
                 endIdx === LANDMARK_INDICES.LEFT_ANKLE) {
-                color = COLORS.leftSide; // Person's left = red
+                color = COLORS.leftSide;
             }
-            // Person's right side
+            // Person's right side connections
             else if (startIdx === LANDMARK_INDICES.RIGHT_SHOULDER ||
-                startIdx === LANDMARK_INDICES.RIGHT_ELBOW ||
-                startIdx === LANDMARK_INDices.RIGHT_WRIST ||
-                startIdx === LANDMARK_INDICES.RIGHT_HIP ||
-                startIdx === LANDMARK_INDICES.RIGHT_KNEE ||
-                startIdx === LANDMARK_INDICES.RIGHT_ANKLE ||
-                endIdx === LANDMARK_INDICES.RIGHT_SHOULDER ||
-                endIdx === LANDMARK_INDICES.RIGHT_ELBOW ||
-                endIdx === LANDMARK_INDICES.RIGHT_WRIST ||
-                endIdx === LANDMARK_INDICES.RIGHT_HIP ||
-                endIdx === LANDMARK_INDICES.RIGHT_KNEE ||
-                endIdx === LANDMARK_INDICES.RIGHT_ANKLE) {
-                color = COLORS.rightSide; // Person's right = blue
+                     startIdx === LANDMARK_INDICES.RIGHT_ELBOW ||
+                     startIdx === LANDMARK_INDICES.RIGHT_WRIST ||
+                     startIdx === LANDMARK_INDICES.RIGHT_HIP ||
+                     startIdx === LANDMARK_INDICES.RIGHT_KNEE ||
+                     startIdx === LANDMARK_INDICES.RIGHT_ANKLE ||
+                     endIdx === LANDMARK_INDICES.RIGHT_SHOULDER ||
+                     endIdx === LANDMARK_INDICES.RIGHT_ELBOW ||
+                     endIdx === LANDMARK_INDICES.RIGHT_WRIST ||
+                     endIdx === LANDMARK_INDICES.RIGHT_HIP ||
+                     endIdx === LANDMARK_INDICES.RIGHT_KNEE ||
+                     endIdx === LANDMARK_INDICES.RIGHT_ANKLE) {
+                color = COLORS.rightSide;
             }
 
             drawLine(start, end, width, height, color);
@@ -302,20 +327,24 @@ function drawConnections(landmarks, width, height) {
 }
 
 function drawLine(start, end, width, height, color) {
-    // Convert normalized coordinates to canvas coordinates
-    const startX = start.x * width;
-    const startY = start.y * height;
-    const endX = end.x * width;
-    const endY = end.y * height;
+    // Convert normalized coordinates to canvas coordinates with mirroring
+    const startX = flipX(start.x, width);
+    const startY = flipY(start.y, height);
+    const endX = flipX(end.x, width);
+    const endY = flipY(end.y, height);
 
     canvasCtx.beginPath();
     canvasCtx.moveTo(startX, startY);
     canvasCtx.lineTo(endX, endY);
     canvasCtx.strokeStyle = color;
+    canvasCtx.lineWidth = 3;
+    canvasCtx.lineCap = 'round';
     canvasCtx.stroke();
 }
 
 function drawLandmarks(landmarks, width, height) {
+    if (!landmarks) return;
+    
     landmarks.forEach((landmark, index) => {
         if (landmark && landmark.visibility > 0.1) {
             // Determine color based on side and importance
@@ -323,20 +352,26 @@ function drawLandmarks(landmarks, width, height) {
 
             if (index <= 10) {
                 // Face landmarks
-                color = index <= 3 || index === 7 || index === 9 ?
-                    COLORS.leftSide : COLORS.rightSide;
+                color = index <= 3 || index === 7 || index === 9 ? 
+                        COLORS.leftSide : COLORS.rightSide;
                 size = 5;
             } else if (index <= 22) {
                 // Upper body
                 if (index === LANDMARK_INDICES.LEFT_SHOULDER ||
                     index === LANDMARK_INDICES.LEFT_ELBOW ||
-                    index === LANDMARK_INDICES.LEFT_WRIST) {
-                    color = COLORS.leftSide; // Person's left = red
+                    index === LANDMARK_INDICES.LEFT_WRIST ||
+                    index === LANDMARK_INDICES.LEFT_PINKY ||
+                    index === LANDMARK_INDICES.LEFT_INDEX ||
+                    index === LANDMARK_INDICES.LEFT_THUMB) {
+                    color = COLORS.leftSide;
                     size = 8;
                 } else if (index === LANDMARK_INDICES.RIGHT_SHOULDER ||
-                    index === LANDMARK_INDICES.RIGHT_ELBOW ||
-                    index === LANDMARK_INDICES.RIGHT_WRIST) {
-                    color = COLORS.rightSide; // Person's right = blue
+                           index === LANDMARK_INDICES.RIGHT_ELBOW ||
+                           index === LANDMARK_INDICES.RIGHT_WRIST ||
+                           index === LANDMARK_INDICES.RIGHT_PINKY ||
+                           index === LANDMARK_INDICES.RIGHT_INDEX ||
+                           index === LANDMARK_INDICES.RIGHT_THUMB) {
+                    color = COLORS.rightSide;
                     size = 8;
                 } else {
                     color = COLORS.center;
@@ -344,8 +379,7 @@ function drawLandmarks(landmarks, width, height) {
                 }
             } else {
                 // Lower body
-                color = index === 23 || index === 25 || index === 27 || index === 29 || index === 31 ?
-                    COLORS.leftSide : COLORS.rightSide;
+                color = index % 2 === 1 ? COLORS.leftSide : COLORS.rightSide;
                 size = 7;
             }
 
@@ -354,16 +388,20 @@ function drawLandmarks(landmarks, width, height) {
                 size = 9;
             }
 
+            if (index === 11 || index === 12) { // Shoulders
+                size = 10;
+            }
+
             drawPoint(landmark, width, height, color, size, index);
         }
     });
 }
 
 function drawPoint(landmark, width, height, color, size, index) {
-    const x = landmark.x * width;
-    const y = landmark.y * height;
+    const x = flipX(landmark.x, width);
+    const y = flipY(landmark.y, height);
 
-    // Outer circle
+    // Outer glow
     canvasCtx.beginPath();
     canvasCtx.arc(x, y, size * 1.5, 0, 2 * Math.PI);
     canvasCtx.fillStyle = color + '40';
@@ -375,19 +413,19 @@ function drawPoint(landmark, width, height, color, size, index) {
     canvasCtx.fillStyle = color;
     canvasCtx.fill();
 
-    // White center
+    // White center dot
     canvasCtx.beginPath();
     canvasCtx.arc(x, y, size * 0.4, 0, 2 * Math.PI);
     canvasCtx.fillStyle = '#FFFFFF';
     canvasCtx.fill();
 
-    // Draw index for key points (optional)
-    if ([0, 11, 12, 13, 14, 15, 16, 23, 24].includes(index)) {
+    // Draw index number for key landmarks (for debugging)
+    if ([0, 11, 12, 13, 14, 15, 16].includes(index)) {
         canvasCtx.fillStyle = '#FFFFFF';
-        canvasCtx.font = 'bold 10px Arial';
+        canvasCtx.font = 'bold 11px Arial';
         canvasCtx.textAlign = 'center';
         canvasCtx.textBaseline = 'middle';
-        canvasCtx.fillText(index, x, y);
+        canvasCtx.fillText(index.toString(), x, y);
     }
 }
 
@@ -418,21 +456,26 @@ function drawArmAngles(landmarks, width, height) {
 }
 
 function drawAngleArc(shoulder, elbow, wrist, width, height, color, side) {
-    const elbowX = elbow.x * width;
-    const elbowY = elbow.y * height;
+    const elbowX = flipX(elbow.x, width);
+    const elbowY = flipY(elbow.y, height);
+    
+    const shoulderX = flipX(shoulder.x, width);
+    const shoulderY = flipY(shoulder.y, height);
+    const wristX = flipX(wrist.x, width);
+    const wristY = flipY(wrist.y, height);
 
     // Calculate angle
     const angle = calculateAngle(shoulder, elbow, wrist);
     const radius = 35;
 
-    // Calculate arc angles
-    const startAngle = Math.atan2(shoulder.y - elbow.y, shoulder.x - elbow.x);
-    const endAngle = Math.atan2(wrist.y - elbow.y, wrist.x - elbow.x);
+    // Calculate arc angles (vectors from elbow to shoulder and wrist)
+    const startAngle = Math.atan2(shoulderY - elbowY, shoulderX - elbowX);
+    const endAngle = Math.atan2(wristY - elbowY, wristX - elbowX);
 
     // Draw arc
     canvasCtx.beginPath();
     canvasCtx.arc(elbowX, elbowY, radius, startAngle, endAngle);
-    canvasCtx.strokeStyle = angle < 90 ? COLORS.angleArc : color;
+    canvasCtx.strokeStyle = color;
     canvasCtx.lineWidth = 4;
     canvasCtx.lineCap = 'round';
     canvasCtx.stroke();
@@ -441,6 +484,7 @@ function drawAngleArc(shoulder, elbow, wrist, width, height, color, side) {
     canvasCtx.fillStyle = '#FFFFFF';
     canvasCtx.font = 'bold 14px Arial';
     canvasCtx.textAlign = 'center';
+    canvasCtx.textBaseline = 'middle';
     canvasCtx.fillText(`${Math.round(angle)}°`, elbowX, elbowY - radius - 10);
 
     // Draw side label
@@ -493,21 +537,23 @@ function calculateArmAngles(landmarks) {
     }
 
     // Update arm visibility status
-    updateArmVisibility(leftShoulder && rightShoulder);
+    const leftArmVisible = leftShoulder && leftElbow && leftWrist;
+    const rightArmVisible = rightShoulder && rightElbow && rightWrist;
+    updateArmVisibility(leftArmVisible, rightArmVisible);
     
     // Update title angles
     updateTitleAngles();
 }
 
 function calculateAngle(a, b, c) {
-    const radians = Math.atan2(c.y - b.y, c.x - b.x) -
-        Math.atan2(a.y - b.y, a.x - b.x);
+    const radians = Math.atan2(c.y - b.y, c.x - b.x) - 
+                    Math.atan2(a.y - b.y, a.x - b.x);
     let angle = Math.abs(radians * 180.0 / Math.PI);
-
+    
     if (angle > 180.0) {
         angle = 360 - angle;
     }
-
+    
     return angle;
 }
 
@@ -527,7 +573,7 @@ function countLeftCurl(angle) {
         updateLeftStageProgress(0);
         animateLeftRep();
         
-        // Count rep if either arm completes curl
+        // Count total rep
         if (!repInProgress) {
             repInProgress = true;
             totalRepsCounter++;
@@ -553,7 +599,7 @@ function countRightCurl(angle) {
         updateRightStageProgress(0);
         animateRightRep();
         
-        // Count rep if either arm completes curl
+        // Count total rep
         if (!repInProgress) {
             repInProgress = true;
             totalRepsCounter++;
@@ -581,8 +627,10 @@ function updateLeftArmUI(angle, visible = true) {
 
     if (visible) {
         const circlePercent = (angle / 180) * 360;
-        leftAngleFill.style.background =
+        leftAngleFill.style.background = 
             `conic-gradient(from 0deg, #FF6B6B 0deg, #FF6B6B ${circlePercent}deg, transparent ${circlePercent}deg, transparent 360deg)`;
+    } else {
+        leftAngleFill.style.background = `conic-gradient(from 0deg, transparent 0deg, transparent 360deg)`;
     }
 }
 
@@ -592,8 +640,10 @@ function updateRightArmUI(angle, visible = true) {
 
     if (visible) {
         const circlePercent = (angle / 180) * 360;
-        rightAngleFill.style.background =
+        rightAngleFill.style.background = 
             `conic-gradient(from 0deg, #4CC9F0 0deg, #4CC9F0 ${circlePercent}deg, transparent ${circlePercent}deg, transparent 360deg)`;
+    } else {
+        rightAngleFill.style.background = `conic-gradient(from 0deg, transparent 0deg, transparent 360deg)`;
     }
 }
 
@@ -601,12 +651,14 @@ function updateLeftStage(text, color) {
     leftStage.textContent = text;
     leftStageText.textContent = text;
     leftStageText.style.color = color;
+    leftStageIndicator.style.backgroundColor = color;
 }
 
 function updateRightStage(text, color) {
     rightStage.textContent = text;
     rightStageText.textContent = text;
     rightStageText.style.color = color;
+    rightStageIndicator.style.backgroundColor = color;
 }
 
 function updateLeftStageProgress(progress) {
@@ -669,16 +721,19 @@ function updateLandmarkStats(count) {
 
     confidenceDisplay.textContent = `Confidence: ${detectionConfidence}%`;
     confidenceDisplay.style.color = detectionConfidence > 70 ? '#4CC9F0' :
-        detectionConfidence > 50 ? '#FFD166' : '#FF6B6B';
+                                   detectionConfidence > 50 ? '#FFD166' : '#FF6B6B';
 }
 
-function updateArmVisibility(bothVisible) {
-    if (bothVisible) {
+function updateArmVisibility(leftVisible, rightVisible) {
+    if (leftVisible && rightVisible) {
         armVisibility.textContent = 'Both arms visible';
         armVisibility.style.color = '#06D6A0';
-    } else {
-        armVisibility.textContent = 'One arm hidden';
+    } else if (leftVisible || rightVisible) {
+        armVisibility.textContent = 'One arm visible';
         armVisibility.style.color = '#FFD166';
+    } else {
+        armVisibility.textContent = 'No arms visible';
+        armVisibility.style.color = '#FF6B6B';
     }
 }
 
@@ -690,12 +745,12 @@ function updateStatus(message) {
 function updateLatency(latency) {
     latencyDisplay.textContent = `Latency: ${latency}ms`;
     latencyDisplay.style.color = latency > 200 ? '#FF6B6B' :
-        latency > 100 ? '#FFD166' : '#4CC9F0';
+                                latency > 100 ? '#FFD166' : '#4CC9F0';
 }
 
 function updateProcessingMode() {
     processingMode.textContent = useAPI ? 'API' : 'Browser';
-    apiToggleBtn.querySelector('.btn-text').textContent =
+    apiToggleBtn.querySelector('.btn-text').textContent = 
         useAPI ? 'API Mode: ON' : 'API Mode: OFF';
 }
 
@@ -763,13 +818,9 @@ async function startCamera() {
             videoElement.onloadedmetadata = resolve;
         });
 
-        // Set canvas size to match video with mirroring
+        // Set canvas size to match video
         overlayCanvas.width = videoElement.videoWidth;
         overlayCanvas.height = videoElement.videoHeight;
-
-        // Apply mirror effect to canvas for consistency
-        canvasCtx.translate(overlayCanvas.width, 0);
-        canvasCtx.scale(-1, 1);
 
         // Start camera processing
         camera = new window.Camera(videoElement, {
@@ -801,7 +852,7 @@ function startFPSCounter() {
         fpsCounter.textContent = `${fps} FPS`;
 
         fpsCounter.style.color = fps < 15 ? '#FF6B6B' :
-            fps < 25 ? '#FFD166' : '#4CC9F0';
+                                fps < 25 ? '#FFD166' : '#4CC9F0';
     }, 1000);
 }
 
@@ -833,11 +884,6 @@ window.addEventListener('resize', () => {
     if (videoElement.videoWidth && videoElement.videoHeight) {
         overlayCanvas.width = videoElement.videoWidth;
         overlayCanvas.height = videoElement.videoHeight;
-        
-        // Re-apply mirror transform
-        canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
-        canvasCtx.translate(overlayCanvas.width, 0);
-        canvasCtx.scale(-1, 1);
     }
 });
 

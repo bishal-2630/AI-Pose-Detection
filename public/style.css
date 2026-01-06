@@ -154,7 +154,7 @@ h1 {
     height: 100%;
     display: block;
     object-fit: cover;
-    transform: scaleX(-1); /* Mirror view */
+    transform: scaleX(-1); /* Mirror view for natural perception */
 }
 
 #overlayCanvas {
@@ -165,7 +165,7 @@ h1 {
     height: 100%;
     pointer-events: none;
     z-index: 2;
-    transform: scaleX(-1); /* Mirror to match video */
+    /* NO transform here - handled in JavaScript */
 }
 
 .overlay-display {
