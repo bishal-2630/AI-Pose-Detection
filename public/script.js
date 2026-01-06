@@ -1,4 +1,4 @@
-// script.js - Mirror view with single hand rep counting
+// script.js - Fixed camera and overlay issues
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
@@ -42,7 +42,6 @@ let leftArmAngle = 0;
 let rightArmAngle = 0;
 let useAPI = true;
 let pose = null;
-let camera = null;
 let mediaStream = null;
 let frameCount = 0;
 let fps = 0;
@@ -50,17 +49,19 @@ let landmarks = null;
 let detectionConfidence = 0;
 let lastRepTime = 0;
 let repCooldown = 1000; // 1 second cooldown between reps
+let lastFrameTime = 0;
+let animationFrameId = null;
 
-// Colors for mirror view (screen perspective)
+// Colors for mirror view
 const COLORS = {
-    leftSide: '#FF6B6B',      // Red for left side (screen left in mirror)
-    rightSide: '#4CC9F0',     // Blue for right side (screen right in mirror)
-    center: '#FFD166',        // Yellow for center points
-    connections: '#118AB2',   // Blue for skeleton lines
-    angleArc: '#06D6A0'      // Green for angle arcs
+    leftSide: '#FF6B6B',
+    rightSide: '#4CC9F0',
+    center: '#FFD166',
+    connections: '#118AB2',
+    angleArc: '#06D6A0'
 };
 
-// MediaPipe landmark indices (person's perspective)
+// Landmark indices for MediaPipe
 const LANDMARK_INDICES = {
     NOSE: 0,
     LEFT_SHOULDER: 11,
@@ -73,32 +74,27 @@ const LANDMARK_INDICES = {
     RIGHT_HIP: 24
 };
 
-// Skeleton connections for arms only
-const SKELETON_CONNECTIONS = [
-    // Upper body
-    [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.RIGHT_SHOULDER],
-    [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_ELBOW],
-    [LANDMARK_INDICES.LEFT_ELBOW, LANDMARK_INDICES.LEFT_WRIST],
-    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_ELBOW],
-    [LANDMARK_INDICES.RIGHT_ELBOW, LANDMARK_INDICES.RIGHT_WRIST],
-    [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_HIP],
-    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_HIP]
-];
-
 // ==================== MEDIAPIPE INITIALIZATION ====================
 
 async function initializeMediaPipe() {
     try {
         updateStatus('Loading pose detection...');
         
-        // Load MediaPipe
+        // Check if MediaPipe is already loaded
         if (typeof window.Pose === 'undefined') {
-            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');
-            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
+            // Load MediaPipe from CDN
+            const poseScript = document.createElement('script');
+            poseScript.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
+            document.head.appendChild(poseScript);
+            
+            // Wait for Pose to be available
+            await new Promise(resolve => {
+                poseScript.onload = resolve;
+            });
         }
         
         // Initialize MediaPipe Pose
-        pose = new window.Pose({
+        pose = new Pose({
             locateFile: (file) => {
                 return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
             }
@@ -114,24 +110,112 @@ async function initializeMediaPipe() {
         
         pose.onResults(onPoseResults);
         
-        updateStatus('Ready for detection');
+        updateStatus('Pose detection ready');
         return true;
         
     } catch (error) {
         console.error('MediaPipe error:', error);
-        updateStatus('Failed to initialize');
+        updateStatus('Failed to load pose detection');
         return false;
     }
 }
 
-function loadScript(src) {
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-    });
+// ==================== CAMERA MANAGEMENT ====================
+
+async function startCamera() {
+    try {
+        updateStatus('Requesting camera access...');
+        
+        // Stop any existing stream
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+        }
+        
+        // Get camera access
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: 'user',
+                frameRate: { ideal: 30 }
+            },
+            audio: false
+        });
+        
+        // Set video source
+        videoElement.srcObject = mediaStream;
+        
+        // Wait for video to load
+        await new Promise((resolve) => {
+            videoElement.onloadedmetadata = () => {
+                // Set canvas dimensions to match video
+                overlayCanvas.width = videoElement.videoWidth;
+                overlayCanvas.height = videoElement.videoHeight;
+                console.log(`Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
+                resolve();
+            };
+            videoElement.onerror = () => {
+                console.error('Video element error');
+                updateStatus('Failed to load video');
+                resolve();
+            };
+        });
+        
+        // Start pose detection
+        await initializeMediaPipe();
+        
+        // Start processing frames
+        startFrameProcessing();
+        
+        updateStatus('Camera ready - Start exercising!');
+        
+        // Start FPS counter
+        startFPSCounter();
+        
+    } catch (error) {
+        console.error('Camera error:', error);
+        if (error.name === 'NotAllowedError') {
+            updateStatus('Camera access denied. Please allow camera permissions.');
+            alert('Camera access is required. Please allow camera permissions and refresh the page.');
+        } else if (error.name === 'NotFoundError') {
+            updateStatus('No camera found. Please connect a camera.');
+        } else {
+            updateStatus(`Camera error: ${error.message}`);
+        }
+    }
+}
+
+function startFrameProcessing() {
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+    }
+    
+    function processFrame() {
+        if (videoElement.readyState >= 2 && pose) { // HAVE_CURRENT_DATA or better
+            // Process the current video frame
+            pose.send({image: videoElement});
+            frameCount++;
+        }
+        
+        // Continue processing
+        animationFrameId = requestAnimationFrame(processFrame);
+    }
+    
+    // Start processing
+    processFrame();
+}
+
+function startFPSCounter() {
+    setInterval(() => {
+        const now = performance.now();
+        const elapsed = now - lastFrameTime;
+        fps = elapsed > 0 ? Math.round(1000 / elapsed) : 0;
+        lastFrameTime = now;
+        
+        fpsCounter.textContent = `${fps} FPS`;
+        fpsCounter.style.color = fps < 15 ? '#FF6B6B' : 
+                                fps < 25 ? '#FFD166' : '#4CC9F0';
+    }, 1000);
 }
 
 // ==================== POSE DETECTION & VISUALIZATION ====================
@@ -145,7 +229,7 @@ function onPoseResults(results) {
         const detectedCount = countDetectedLandmarks(landmarks);
         updateLandmarkStats(detectedCount);
         
-        // Draw skeleton with mirror view
+        // Draw skeleton and reps counter
         drawSkeleton(results);
         
         // Calculate and display both arm angles
@@ -155,21 +239,22 @@ function onPoseResults(results) {
     } else {
         landmarks = null;
         clearCanvas();
+        // Still draw reps counter even without landmarks
+        drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
         updateLandmarkStats(0);
         updateStatus('Move into frame');
     }
-    
-    frameCount++;
 }
 
 function countDetectedLandmarks(landmarks) {
+    if (!landmarks) return 0;
     return landmarks.filter(landmark => 
         landmark && landmark.visibility && landmark.visibility > 0.1
     ).length;
 }
 
 function calculateConfidence(results) {
-    if (!results.poseWorldLandmarks) return 0;
+    if (!results.poseWorldLandmarks || !results.poseWorldLandmarks.length) return 0;
     const sum = results.poseWorldLandmarks.reduce((acc, landmark) => 
         acc + (landmark.visibility || 0), 0
     );
@@ -177,56 +262,56 @@ function calculateConfidence(results) {
 }
 
 function drawSkeleton(results) {
-    const videoWidth = overlayCanvas.width;
-    const videoHeight = overlayCanvas.height;
+    const width = overlayCanvas.width;
+    const height = overlayCanvas.height;
     
     // Clear canvas
-    canvasCtx.clearRect(0, 0, videoWidth, videoHeight);
+    canvasCtx.clearRect(0, 0, width, height);
     
-    // Draw all connections
-    drawConnections(results.poseLandmarks, videoWidth, videoHeight);
+    // Draw skeleton if landmarks exist
+    if (results.poseLandmarks) {
+        drawConnections(results.poseLandmarks, width, height);
+        drawKeyLandmarks(results.poseLandmarks, width, height);
+    }
     
-    // Draw key landmarks only
-    drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
-    
-    // Draw reps counter on canvas (top left corner)
-    drawRepsCounter(videoWidth, videoHeight);
+    // Always draw reps counter
+    drawRepsCounter(width, height);
 }
 
 function drawConnections(landmarks, width, height) {
     canvasCtx.lineWidth = 3;
     canvasCtx.lineCap = 'round';
     
-    SKELETON_CONNECTIONS.forEach(([startIdx, endIdx]) => {
-        const start = landmarks[startIdx];
-        const end = landmarks[endIdx];
-        
-        if (start && end && start.visibility > 0.1 && end.visibility > 0.1) {
-            // Determine color based on side (mirror view)
-            let color = COLORS.connections;
-            
-            // Mirror view: left side (screen left) = person's right
-            if (startIdx === LANDMARK_INDICES.RIGHT_SHOULDER || 
-                startIdx === LANDMARK_INDICES.RIGHT_ELBOW || 
-                startIdx === LANDMARK_INDICES.RIGHT_WRIST ||
-                endIdx === LANDMARK_INDICES.RIGHT_SHOULDER || 
-                endIdx === LANDMARK_INDICES.RIGHT_ELBOW || 
-                endIdx === LANDMARK_INDICES.RIGHT_WRIST) {
-                color = COLORS.leftSide; // Screen left = red
-            }
-            // Mirror view: right side (screen right) = person's left
-            else if (startIdx === LANDMARK_INDICES.LEFT_SHOULDER || 
-                     startIdx === LANDMARK_INDICES.LEFT_ELBOW || 
-                     startIdx === LANDMARK_INDICES.LEFT_WRIST ||
-                     endIdx === LANDMARK_INDICES.LEFT_SHOULDER || 
-                     endIdx === LANDMARK_INDICES.LEFT_ELBOW || 
-                     endIdx === LANDMARK_INDICES.LEFT_WRIST) {
-                color = COLORS.rightSide; // Screen right = blue
-            }
-            
-            drawLine(start, end, width, height, color);
-        }
-    });
+    // Draw shoulder connection
+    const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
+    const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
+    
+    if (leftShoulder && rightShoulder && 
+        leftShoulder.visibility > 0.1 && rightShoulder.visibility > 0.1) {
+        drawLine(leftShoulder, rightShoulder, width, height, COLORS.connections);
+    }
+    
+    // Draw left arm
+    const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
+    const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
+    
+    if (leftShoulder && leftElbow && leftShoulder.visibility > 0.1 && leftElbow.visibility > 0.1) {
+        drawLine(leftShoulder, leftElbow, width, height, COLORS.rightSide); // Right side in mirror
+    }
+    if (leftElbow && leftWrist && leftElbow.visibility > 0.1 && leftWrist.visibility > 0.1) {
+        drawLine(leftElbow, leftWrist, width, height, COLORS.rightSide);
+    }
+    
+    // Draw right arm
+    const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
+    const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
+    
+    if (rightShoulder && rightElbow && rightShoulder.visibility > 0.1 && rightElbow.visibility > 0.1) {
+        drawLine(rightShoulder, rightElbow, width, height, COLORS.leftSide); // Left side in mirror
+    }
+    if (rightElbow && rightWrist && rightElbow.visibility > 0.1 && rightWrist.visibility > 0.1) {
+        drawLine(rightElbow, rightWrist, width, height, COLORS.leftSide);
+    }
 }
 
 function drawLine(start, end, width, height, color) {
@@ -243,83 +328,79 @@ function drawLine(start, end, width, height, color) {
     canvasCtx.stroke();
 }
 
-function drawLandmarks(landmarks, width, height) {
-    // Draw only key points
-    const keyPoints = [
-        LANDMARK_INDICES.LEFT_SHOULDER,
-        LANDMARK_INDICES.RIGHT_SHOULDER,
-        LANDMARK_INDICES.LEFT_ELBOW,
-        LANDMARK_INDICES.RIGHT_ELBOW,
-        LANDMARK_INDICES.LEFT_WRIST,
-        LANDMARK_INDICES.RIGHT_WRIST
+function drawKeyLandmarks(landmarks, width, height) {
+    // Draw shoulder points
+    const points = [
+        {index: LANDMARK_INDICES.LEFT_SHOULDER, color: COLORS.rightSide, label: 'L'},
+        {index: LANDMARK_INDICES.RIGHT_SHOULDER, color: COLORS.leftSide, label: 'R'},
+        {index: LANDMARK_INDICES.LEFT_ELBOW, color: COLORS.rightSide, label: 'LE'},
+        {index: LANDMARK_INDICES.RIGHT_ELBOW, color: COLORS.leftSide, label: 'RE'},
+        {index: LANDMARK_INDICES.LEFT_WRIST, color: COLORS.rightSide, label: 'LW'},
+        {index: LANDMARK_INDICES.RIGHT_WRIST, color: COLORS.leftSide, label: 'RW'}
     ];
     
-    keyPoints.forEach(index => {
-        const landmark = landmarks[index];
+    points.forEach(point => {
+        const landmark = landmarks[point.index];
         if (landmark && landmark.visibility > 0.1) {
             // Mirror view: flip X coordinate
-            const mirroredX = width - (landmark.x * width);
+            const x = width - (landmark.x * width);
             const y = landmark.y * height;
             
-            // Determine color based on side
-            let color, size = 8;
+            // Draw point
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, 8, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = point.color;
+            canvasCtx.fill();
             
-            if (index === LANDMARK_INDICES.RIGHT_SHOULDER || 
-                index === LANDMARK_INDICES.RIGHT_ELBOW || 
-                index === LANDMARK_INDICES.RIGHT_WRIST) {
-                color = COLORS.leftSide; // Screen left = red
-            } else if (index === LANDMARK_INDICES.LEFT_SHOULDER || 
-                      index === LANDMARK_INDICES.LEFT_ELBOW || 
-                      index === LANDMARK_INDICES.LEFT_WRIST) {
-                color = COLORS.rightSide; // Screen right = blue
-            }
+            // White center
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, 3, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = '#FFFFFF';
+            canvasCtx.fill();
             
-            drawPoint(mirroredX, y, color, size);
+            // Draw label
+            canvasCtx.fillStyle = '#FFFFFF';
+            canvasCtx.font = 'bold 10px Arial';
+            canvasCtx.textAlign = 'center';
+            canvasCtx.textBaseline = 'middle';
+            canvasCtx.fillText(point.label, x, y);
         }
     });
 }
 
-function drawPoint(x, y, color, size) {
-    // Outer circle
-    canvasCtx.beginPath();
-    canvasCtx.arc(x, y, size * 1.5, 0, 2 * Math.PI);
-    canvasCtx.fillStyle = color + '40';
-    canvasCtx.fill();
-    
-    // Main point
-    canvasCtx.beginPath();
-    canvasCtx.arc(x, y, size, 0, 2 * Math.PI);
-    canvasCtx.fillStyle = color;
-    canvasCtx.fill();
-    
-    // White center
-    canvasCtx.beginPath();
-    canvasCtx.arc(x, y, size * 0.4, 0, 2 * Math.PI);
-    canvasCtx.fillStyle = '#FFFFFF';
-    canvasCtx.fill();
-}
-
 function drawRepsCounter(width, height) {
     // Draw background box
-    canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    canvasCtx.fillRect(20, 20, 180, 80);
+    const boxWidth = 200;
+    const boxHeight = 80;
+    const padding = 20;
+    
+    canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    canvasCtx.fillRect(padding, padding, boxWidth, boxHeight);
     
     // Draw border
     canvasCtx.strokeStyle = '#00dbde';
-    canvasCtx.lineWidth = 2;
-    canvasCtx.strokeRect(20, 20, 180, 80);
+    canvasCtx.lineWidth = 3;
+    canvasCtx.strokeRect(padding, padding, boxWidth, boxHeight);
     
     // Draw "REPS" label
     canvasCtx.fillStyle = '#FFFFFF';
-    canvasCtx.font = 'bold 16px Arial';
+    canvasCtx.font = 'bold 18px Arial';
     canvasCtx.textAlign = 'left';
-    canvasCtx.fillText('BICEP CURL REPS', 35, 45);
+    canvasCtx.fillText('BICEP CURL REPS', padding + 10, padding + 30);
     
     // Draw total reps count
     canvasCtx.fillStyle = '#00dbde';
-    canvasCtx.font = 'bold 36px Arial';
+    canvasCtx.font = 'bold 40px Arial';
     canvasCtx.textAlign = 'center';
-    canvasCtx.fillText(totalReps.toString(), 110, 85);
+    canvasCtx.fillText(totalReps.toString(), padding + boxWidth/2, padding + 65);
+    
+    // Draw small indicator for active detection
+    if (landmarks && landmarks.length > 0) {
+        canvasCtx.fillStyle = '#06D6A0';
+        canvasCtx.beginPath();
+        canvasCtx.arc(padding + 10, padding + 10, 5, 0, 2 * Math.PI);
+        canvasCtx.fill();
+    }
 }
 
 function clearCanvas() {
@@ -552,82 +633,14 @@ function resetAll() {
     updateRightStageProgress(0);
     clearCanvas();
     
+    // Draw empty reps counter
+    drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
+    
     // Visual feedback
     totalCounterElement.style.color = '#FF6B6B';
     setTimeout(() => {
         totalCounterElement.style.color = '#00dbde';
     }, 300);
-}
-
-// ==================== CAMERA MANAGEMENT ====================
-
-async function startCamera() {
-    try {
-        updateStatus('Starting camera...');
-        
-        await initializeMediaPipe();
-        
-        // Request camera access
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                facingMode: 'user',
-                frameRate: { ideal: 30 }
-            },
-            audio: false
-        });
-        
-        // Set video source
-        videoElement.srcObject = mediaStream;
-        
-        // Wait for video to be ready
-        await new Promise((resolve) => {
-            videoElement.onloadedmetadata = () => {
-                // Set canvas size to match video
-                overlayCanvas.width = videoElement.videoWidth;
-                overlayCanvas.height = videoElement.videoHeight;
-                resolve();
-            };
-        });
-        
-        // Start MediaPipe processing
-        camera = new window.Camera(videoElement, {
-            onFrame: async () => {
-                if (pose) {
-                    await pose.send({ image: videoElement });
-                }
-            },
-            width: overlayCanvas.width,
-            height: overlayCanvas.height
-        });
-        
-        await camera.start();
-        updateStatus('Ready - Do bicep curls!');
-        
-        // Start FPS counter
-        startFPSCounter();
-        
-    } catch (error) {
-        console.error('Camera error:', error);
-        updateStatus('Camera access required - Please allow camera permissions');
-        
-        // Show user-friendly error
-        if (error.name === 'NotAllowedError') {
-            alert('Please allow camera access to use this application. Refresh the page and click "Allow" when prompted.');
-        }
-    }
-}
-
-function startFPSCounter() {
-    setInterval(() => {
-        fps = frameCount;
-        frameCount = 0;
-        fpsCounter.textContent = `${fps} FPS`;
-        
-        fpsCounter.style.color = fps < 15 ? '#FF6B6B' : 
-                                fps < 25 ? '#FFD166' : '#4CC9F0';
-    }, 1000);
 }
 
 // ==================== EVENT LISTENERS ====================
@@ -639,12 +652,14 @@ resetBtn.addEventListener('click', resetAll);
 totalCounterElement.addEventListener('click', () => {
     totalReps = 0;
     updateCounters();
+    drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
 });
 
 // Mobile summary tap to reset
 totalRepsElement.addEventListener('click', () => {
     totalReps = 0;
     updateCounters();
+    drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
 });
 
 // ==================== INITIALIZATION ====================
@@ -652,14 +667,15 @@ totalRepsElement.addEventListener('click', () => {
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('Starting Bicep Curl Counter...');
     
-    // Set canvas size initially
+    // Set initial canvas size
     overlayCanvas.width = 640;
     overlayCanvas.height = 480;
     
+    // Start camera
     await startCamera();
     updateProcessingMode();
     
-    console.log('System ready - Single hand rep counting active');
+    console.log('System initialized');
 });
 
 // Cleanup
@@ -667,7 +683,7 @@ window.addEventListener('beforeunload', () => {
     if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
     }
-    if (camera) {
-        camera.stop();
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
     }
 });
