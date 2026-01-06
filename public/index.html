@@ -41,14 +41,7 @@
                     <div class="camera-status" id="cameraStatus">
                         Starting camera...
                     </div>
-
-                    <!-- Simplified overlay - Only reps counter -->
-                    <div class="reps-overlay">
-                        <div class="reps-display">
-                            <div class="reps-label">TOTAL REPS</div>
-                            <div id="repsCounter" class="reps-value">0</div>
-                        </div>
-                    </div>
+                    <!-- Reps counter is now drawn directly on canvas at top-left -->
                 </div>
 
                 <div class="controls-panel">
@@ -191,7 +184,9 @@
                     </div>
                     <div class="legend-note">
                         <p>💡 <strong>Rep Counting:</strong> Each arm curl counts as 1 rep</p>
-                        <p>Mirror view - Left/right match what you see in camera</p>
+                        <p>🔴 <strong>Left Arm</strong> = Red dots & lines on screen</p>
+                        <p>🔵 <strong>Right Arm</strong> = Blue dots & lines on screen</p>
+                        <p>🟡 <strong>Center Points</strong> = Yellow dots (nose, hips)</p>
                     </div>
                 </div>
             </div>

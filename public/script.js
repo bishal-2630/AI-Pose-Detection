@@ -1,4 +1,4 @@
-// script.js - Fixed null reference errors
+// script.js - Fixed pose detection with proper landmark visualization
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
@@ -49,14 +49,15 @@ let lastRepTime = 0;
 let repCooldown = 1000;
 let lastFrameTime = 0;
 let animationFrameId = null;
+let isPoseReady = false;
 
 // Colors for mirror view
 const COLORS = {
-    leftSide: '#FF6B6B',
-    rightSide: '#4CC9F0',
-    center: '#FFD166',
-    connections: '#118AB2',
-    angleArc: '#06D6A0'
+    leftSide: '#FF6B6B',     // Red for left arm (screen)
+    rightSide: '#4CC9F0',    // Blue for right arm (screen)
+    center: '#FFD166',       // Yellow for center points
+    connections: '#118AB2',  // Blue for skeleton lines
+    angleArc: '#06D6A0'      // Green for angles
 };
 
 // Landmark indices for MediaPipe
@@ -71,6 +72,20 @@ const LANDMARK_INDICES = {
     LEFT_HIP: 23,
     RIGHT_HIP: 24
 };
+
+// Pose connections for drawing skeleton
+const POSE_CONNECTIONS = [
+    [11, 12], // Shoulders
+    [12, 14], // Right shoulder to right elbow
+    [14, 16], // Right elbow to right wrist
+    [11, 13], // Left shoulder to left elbow
+    [13, 15], // Left elbow to left wrist
+    [12, 24], // Right shoulder to right hip
+    [11, 23], // Left shoulder to left hip
+    [24, 23], // Hips
+    [24, 26], // Right hip to right knee
+    [23, 25]  // Left hip to left knee
+];
 
 // ==================== MEDIAPIPE INITIALIZATION ====================
 
@@ -106,7 +121,8 @@ async function initializeMediaPipe() {
         
         pose.onResults(onPoseResults);
         
-        updateStatus('Pose detection ready');
+        isPoseReady = true;
+        updateStatus('Pose detection ready - Start exercising!');
         return true;
         
     } catch (error) {
@@ -144,6 +160,7 @@ async function startCamera() {
                 overlayCanvas.height = videoElement.videoHeight;
                 console.log(`Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
                 updateStatus('Camera ready - Start exercising!');
+                drawTopLeftRepsCounter(); // Draw initial reps counter
                 resolve();
             };
             videoElement.onerror = () => {
@@ -176,7 +193,7 @@ function startFrameProcessing() {
     }
     
     function processFrame() {
-        if (videoElement.readyState >= 2 && pose) {
+        if (videoElement.readyState >= 2 && pose && isPoseReady) {
             pose.send({image: videoElement});
             frameCount++;
         }
@@ -202,21 +219,25 @@ function startFPSCounter() {
 // ==================== POSE DETECTION & VISUALIZATION ====================
 
 function onPoseResults(results) {
-    if (results.poseLandmarks) {
+    if (results.poseLandmarks && results.poseLandmarks.length > 0) {
         landmarks = results.poseLandmarks;
         detectionConfidence = calculateConfidence(results);
         
         const detectedCount = countDetectedLandmarks(landmarks);
         updateLandmarkStats(detectedCount);
         
+        clearCanvas();
         drawSkeleton(results);
-        calculateArmAngles(landmarks);
+        drawTopLeftRepsCounter(); // Draw reps counter on every frame
         
-        updateStatus(`${detectedCount} points detected`);
+        if (detectedCount > 0) {
+            updateStatus(`${detectedCount} points detected`);
+            calculateArmAngles(landmarks);
+        }
     } else {
         landmarks = null;
         clearCanvas();
-        drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
+        drawTopLeftRepsCounter(); // Always show reps counter
         updateLandmarkStats(0);
         updateStatus('Move into frame');
     }
@@ -241,47 +262,42 @@ function drawSkeleton(results) {
     const width = overlayCanvas.width;
     const height = overlayCanvas.height;
     
-    canvasCtx.clearRect(0, 0, width, height);
-    
     if (results.poseLandmarks) {
         drawConnections(results.poseLandmarks, width, height);
         drawKeyLandmarks(results.poseLandmarks, width, height);
     }
-    
-    drawRepsCounter(width, height);
 }
 
 function drawConnections(landmarks, width, height) {
     canvasCtx.lineWidth = 3;
     canvasCtx.lineCap = 'round';
+    canvasCtx.lineJoin = 'round';
     
-    const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
-    const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
-    
-    if (leftShoulder && rightShoulder && 
-        leftShoulder.visibility > 0.1 && rightShoulder.visibility > 0.1) {
-        drawLine(leftShoulder, rightShoulder, width, height, COLORS.connections);
-    }
-    
-    const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
-    const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
-    
-    if (leftShoulder && leftElbow && leftShoulder.visibility > 0.1 && leftElbow.visibility > 0.1) {
-        drawLine(leftShoulder, leftElbow, width, height, COLORS.rightSide);
-    }
-    if (leftElbow && leftWrist && leftElbow.visibility > 0.1 && leftWrist.visibility > 0.1) {
-        drawLine(leftElbow, leftWrist, width, height, COLORS.rightSide);
-    }
-    
-    const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
-    const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
-    
-    if (rightShoulder && rightElbow && rightShoulder.visibility > 0.1 && rightElbow.visibility > 0.1) {
-        drawLine(rightShoulder, rightElbow, width, height, COLORS.leftSide);
-    }
-    if (rightElbow && rightWrist && rightElbow.visibility > 0.1 && rightWrist.visibility > 0.1) {
-        drawLine(rightElbow, rightWrist, width, height, COLORS.leftSide);
-    }
+    // Draw all pose connections
+    POSE_CONNECTIONS.forEach(connection => {
+        const startIndex = connection[0];
+        const endIndex = connection[1];
+        
+        const startLandmark = landmarks[startIndex];
+        const endLandmark = landmarks[endIndex];
+        
+        if (startLandmark && endLandmark && 
+            startLandmark.visibility > 0.1 && endLandmark.visibility > 0.1) {
+            
+            // Determine color based on side
+            let color = COLORS.connections;
+            if (startIndex >= 11 && startIndex <= 16) {
+                // Arm landmarks
+                if (startIndex === 13 || startIndex === 15) {
+                    color = COLORS.rightSide; // Left arm (screen right)
+                } else if (startIndex === 14 || startIndex === 16) {
+                    color = COLORS.leftSide; // Right arm (screen left)
+                }
+            }
+            
+            drawLine(startLandmark, endLandmark, width, height, color);
+        }
+    });
 }
 
 function drawLine(start, end, width, height, color) {
@@ -298,16 +314,57 @@ function drawLine(start, end, width, height, color) {
 }
 
 function drawKeyLandmarks(landmarks, width, height) {
-    const points = [
-        {index: LANDMARK_INDICES.LEFT_SHOULDER, color: COLORS.rightSide, label: 'L'},
-        {index: LANDMARK_INDICES.RIGHT_SHOULDER, color: COLORS.leftSide, label: 'R'},
+    // Draw arm landmarks with larger dots
+    const armPoints = [
+        {index: LANDMARK_INDICES.LEFT_SHOULDER, color: COLORS.rightSide, label: 'LS'},
+        {index: LANDMARK_INDICES.RIGHT_SHOULDER, color: COLORS.leftSide, label: 'RS'},
         {index: LANDMARK_INDICES.LEFT_ELBOW, color: COLORS.rightSide, label: 'LE'},
         {index: LANDMARK_INDICES.RIGHT_ELBOW, color: COLORS.leftSide, label: 'RE'},
         {index: LANDMARK_INDICES.LEFT_WRIST, color: COLORS.rightSide, label: 'LW'},
         {index: LANDMARK_INDICES.RIGHT_WRIST, color: COLORS.leftSide, label: 'RW'}
     ];
     
-    points.forEach(point => {
+    armPoints.forEach(point => {
+        const landmark = landmarks[point.index];
+        if (landmark && landmark.visibility > 0.1) {
+            const x = landmark.x * width;
+            const y = landmark.y * height;
+            
+            // Outer circle
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, 10, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = point.color + '80'; // 50% opacity
+            canvasCtx.fill();
+            
+            // Inner circle
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, 6, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = point.color;
+            canvasCtx.fill();
+            
+            // White center
+            canvasCtx.beginPath();
+            canvasCtx.arc(x, y, 3, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = '#FFFFFF';
+            canvasCtx.fill();
+            
+            // Label
+            canvasCtx.fillStyle = '#FFFFFF';
+            canvasCtx.font = 'bold 12px Arial';
+            canvasCtx.textAlign = 'center';
+            canvasCtx.textBaseline = 'middle';
+            canvasCtx.fillText(point.label, x, y);
+        }
+    });
+    
+    // Draw center points (hips and nose) in yellow
+    const centerPoints = [
+        {index: LANDMARK_INDICES.NOSE, color: COLORS.center, label: 'N'},
+        {index: LANDMARK_INDICES.LEFT_HIP, color: COLORS.center, label: 'LH'},
+        {index: LANDMARK_INDICES.RIGHT_HIP, color: COLORS.center, label: 'RH'}
+    ];
+    
+    centerPoints.forEach(point => {
         const landmark = landmarks[point.index];
         if (landmark && landmark.visibility > 0.1) {
             const x = landmark.x * width;
@@ -318,12 +375,7 @@ function drawKeyLandmarks(landmarks, width, height) {
             canvasCtx.fillStyle = point.color;
             canvasCtx.fill();
             
-            canvasCtx.beginPath();
-            canvasCtx.arc(x, y, 3, 0, 2 * Math.PI);
-            canvasCtx.fillStyle = '#FFFFFF';
-            canvasCtx.fill();
-            
-            canvasCtx.fillStyle = '#FFFFFF';
+            canvasCtx.fillStyle = '#000000';
             canvasCtx.font = 'bold 10px Arial';
             canvasCtx.textAlign = 'center';
             canvasCtx.textBaseline = 'middle';
@@ -332,32 +384,40 @@ function drawKeyLandmarks(landmarks, width, height) {
     });
 }
 
-function drawRepsCounter(width, height) {
-    const boxWidth = 200;
-    const boxHeight = 80;
-    const padding = 20;
+function drawTopLeftRepsCounter() {
+    const width = overlayCanvas.width;
+    const padding = 15;
+    const boxWidth = 180;
+    const boxHeight = 70;
     
-    canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    // Background box
+    canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     canvasCtx.fillRect(padding, padding, boxWidth, boxHeight);
     
+    // Border
     canvasCtx.strokeStyle = '#00dbde';
-    canvasCtx.lineWidth = 3;
+    canvasCtx.lineWidth = 2;
     canvasCtx.strokeRect(padding, padding, boxWidth, boxHeight);
     
+    // Title
     canvasCtx.fillStyle = '#FFFFFF';
-    canvasCtx.font = 'bold 18px Arial';
+    canvasCtx.font = 'bold 16px Arial';
     canvasCtx.textAlign = 'left';
-    canvasCtx.fillText('BICEP CURL REPS', padding + 10, padding + 30);
+    canvasCtx.textBaseline = 'top';
+    canvasCtx.fillText('BICEP CURL REPS', padding + 10, padding + 10);
     
+    // Reps count
     canvasCtx.fillStyle = '#00dbde';
-    canvasCtx.font = 'bold 40px Arial';
+    canvasCtx.font = 'bold 36px Arial';
     canvasCtx.textAlign = 'center';
-    canvasCtx.fillText(totalReps.toString(), padding + boxWidth/2, padding + 65);
+    canvasCtx.textBaseline = 'middle';
+    canvasCtx.fillText(totalReps.toString(), padding + boxWidth/2, padding + boxHeight/2 + 5);
     
+    // Status dot
     if (landmarks && landmarks.length > 0) {
         canvasCtx.fillStyle = '#06D6A0';
         canvasCtx.beginPath();
-        canvasCtx.arc(padding + 10, padding + 10, 5, 0, 2 * Math.PI);
+        canvasCtx.arc(padding + 10, padding + 10, 4, 0, 2 * Math.PI);
         canvasCtx.fill();
     }
 }
@@ -369,11 +429,12 @@ function clearCanvas() {
 // ==================== ARM ANGLE CALCULATION ====================
 
 function calculateArmAngles(landmarks) {
-    const leftShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
+    // Note: Due to mirror view, left arm in camera is right side in landmarks
+    const leftShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER]; // Screen left
     const leftElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
     const leftWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
     
-    const rightShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
+    const rightShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER]; // Screen right
     const rightElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
     const rightWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
     
@@ -384,6 +445,7 @@ function calculateArmAngles(landmarks) {
         leftArmAngle = calculateAngle(leftShoulder, leftElbow, leftWrist);
         updateLeftArmUI(leftArmAngle);
         countReps('left', leftArmAngle);
+        drawAngleArc(leftShoulder, leftElbow, leftWrist, COLORS.leftSide);
     } else {
         leftArmAngle = 0;
         updateLeftArmUI(0, false);
@@ -396,6 +458,7 @@ function calculateArmAngles(landmarks) {
         rightArmAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
         updateRightArmUI(rightArmAngle);
         countReps('right', rightArmAngle);
+        drawAngleArc(rightShoulder, rightElbow, rightWrist, COLORS.rightSide);
     } else {
         rightArmAngle = 0;
         updateRightArmUI(0, false);
@@ -413,7 +476,35 @@ function calculateAngle(a, b, c) {
         angle = 360 - angle;
     }
     
-    return angle;
+    return Math.min(angle, 180);
+}
+
+function drawAngleArc(a, b, c, color) {
+    const width = overlayCanvas.width;
+    const height = overlayCanvas.height;
+    
+    const bx = b.x * width;
+    const by = b.y * height;
+    const radius = 25;
+    
+    // Calculate angle for arc
+    const angleBA = Math.atan2(a.y * height - by, a.x * width - bx);
+    const angleBC = Math.atan2(c.y * height - by, c.x * width - bx);
+    const angle = calculateAngle(a, b, c);
+    
+    // Draw arc
+    canvasCtx.beginPath();
+    canvasCtx.arc(bx, by, radius, angleBA, angleBC);
+    canvasCtx.strokeStyle = color;
+    canvasCtx.lineWidth = 3;
+    canvasCtx.stroke();
+    
+    // Draw angle text near the elbow
+    canvasCtx.fillStyle = color;
+    canvasCtx.font = 'bold 14px Arial';
+    canvasCtx.textAlign = 'center';
+    canvasCtx.textBaseline = 'middle';
+    canvasCtx.fillText(`${Math.round(angle)}°`, bx, by - 20);
 }
 
 function countReps(side, angle) {
@@ -436,6 +527,7 @@ function countReps(side, angle) {
             updateLeftStage("UP", "#EF476F");
             updateLeftStageProgress(0);
             animateLeftRep();
+            drawTopLeftRepsCounter(); // Redraw with new count
         }
     } else if (side === 'right') {
         if (angle > 160) {
@@ -453,6 +545,7 @@ function countReps(side, angle) {
             updateRightStage("UP", "#EF476F");
             updateRightStageProgress(0);
             animateRightRep();
+            drawTopLeftRepsCounter(); // Redraw with new count
         }
     }
 }
@@ -528,7 +621,7 @@ function updateLandmarkStats(count) {
     detectedPoints.textContent = count;
     mobileTotalPoints.textContent = count;
     
-    const percent = (count / 33) * 100;
+    const percent = Math.min((count / 33) * 100, 100);
     landmarksProgress.style.width = `${percent}%`;
     
     confidenceDisplay.textContent = `Confidence: ${detectionConfidence}%`;
@@ -586,7 +679,7 @@ function resetAll() {
     updateRightStageProgress(0);
     clearCanvas();
     
-    drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
+    drawTopLeftRepsCounter(); // Draw reset counter
     
     totalCounterElement.style.color = '#FF6B6B';
     setTimeout(() => {
@@ -603,7 +696,7 @@ resetBtn.addEventListener('click', resetAll);
 totalCounterElement.addEventListener('click', () => {
     totalReps = 0;
     updateCounters();
-    drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
+    drawTopLeftRepsCounter();
 });
 
 // ==================== INITIALIZATION ====================
@@ -611,6 +704,7 @@ totalCounterElement.addEventListener('click', () => {
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('Starting Bicep Curl Counter...');
     
+    // Set initial canvas size
     overlayCanvas.width = 640;
     overlayCanvas.height = 480;
     
