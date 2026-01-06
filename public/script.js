@@ -285,9 +285,9 @@ function drawConnections(landmarks, width, height) {
 }
 
 function drawLine(start, end, width, height, color) {
-    const startX = width - (start.x * width);
+    const startX = start.x * width;
     const startY = start.y * height;
-    const endX = width - (end.x * width);
+    const endX = end.x * width;
     const endY = end.y * height;
     
     canvasCtx.beginPath();
@@ -310,7 +310,7 @@ function drawKeyLandmarks(landmarks, width, height) {
     points.forEach(point => {
         const landmark = landmarks[point.index];
         if (landmark && landmark.visibility > 0.1) {
-            const x = width - (landmark.x * width);
+            const x = landmark.x * width;
             const y = landmark.y * height;
             
             canvasCtx.beginPath();
