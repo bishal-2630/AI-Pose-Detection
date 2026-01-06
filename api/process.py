@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import json
 import numpy as np
+import traceback
 
 def calculate_angle(a, b, c):
     """Calculate angle between three points"""
@@ -17,18 +18,39 @@ def calculate_angle(a, b, c):
     return angle
 
 class handler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+        
+    def do_GET(self):
+        """Simple health check endpoint"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            'success': True,
+            'message': 'Bicep Curl API is running',
+            'version': '1.0.0'
+        }).encode())
+        
     def do_POST(self):
         """Receive landmarks and return angle"""
         try:
             # Handle CORS
             self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-type', 'application/json')
             
             # Get request data
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data)
             
-            # Get landmarks from frontend (already detected by browser MediaPipe)
+            # Get landmarks from frontend 
             shoulder = data.get('shoulder', [0, 0])
             elbow = data.get('elbow', [0, 0])
             wrist = data.get('wrist', [0, 0])
@@ -56,12 +78,14 @@ class handler(BaseHTTPRequestHandler):
             }
             
             self.send_response(200)
-            self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(response).encode())
             
         except Exception as e:
+            print(f"Error in API: {str(e)}")
+            print(traceback.format_exc())
             self.send_response(500)
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({

@@ -6,6 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Pose Estimation - Bicep Curl Counter</title>
     <link rel="stylesheet" href="style.css">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png">
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#0f0c29">
+
+    <!-- PWA Capabilities -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
 </head>
 
 <body>
@@ -16,16 +32,36 @@
         </header>
 
         <div class="content">
-            <!-- Left Column: Video Feed -->
+            <!-- Video Feed Section -->
             <div class="video-section">
                 <div class="video-container">
-                    <video id="webcam" autoplay playsinline></video>
+                    <video id="webcam" autoplay playsinline muted
+                        aria-label="Live camera feed for pose detection"></video>
+                    <canvas id="overlayCanvas" aria-hidden="true"></canvas>
+
                     <div class="angle-overlay">
-                        <span id="angleDisplay">Angle: --°</span>
+                        <div class="angle-display">
+                            <span id="angleDisplay">Angle: --°</span>
+                            <div class="angle-bar">
+                                <div class="angle-fill" id="angleFill"></div>
+                            </div>
+                        </div>
                         <span id="apiStatus" class="api-status">API: Ready</span>
                     </div>
+
                     <div class="processing-mode">
                         <span id="processingMode">Processing Mode: API</span>
+                        <button id="fullscreenBtn" class="fullscreen-btn" title="Toggle fullscreen mode"
+                            aria-label="Toggle fullscreen">⛶</button>
+                    </div>
+
+                    <div class="motion-trail-info">
+                        <span class="trail-label">Motion Trail:</span>
+                        <label for="trailToggle" class="switch-label">
+                            <input type="checkbox" id="trailToggle" checked aria-checked="true" role="switch"
+                                aria-label="Toggle motion trail visualization">
+                            <span class="slider"></span>
+                        </label>
                     </div>
                 </div>
 
@@ -38,30 +74,50 @@
                         <li>Perform bicep curls with right arm</li>
                         <li>Keep your whole body visible</li>
                     </ol>
+                    <div class="mobile-tips">
+                        <h4>📱 Mobile Tips:</h4>
+                        <ul>
+                            <li>Tap counter to reset</li>
+                            <li>Pinch to zoom video</li>
+                            <li>Double tap to toggle camera</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 
-            <!-- Right Column: Stats & Controls -->
+            <!-- Stats & Controls Section -->
             <div class="stats-section">
                 <!-- Stats Card -->
                 <div class="stats-card">
                     <h2>📊 Statistics</h2>
 
                     <div class="stat">
-                        <div class="stat-label">Total Reps</div>
-                        <div class="stat-value" id="counter">0</div>
-                    </div>
-
-                    <div class="stat">
-                        <div class="stat-label">Current Stage</div>
-                        <div class="stage-indicator">
-                            <span id="stageText">Waiting...</span>
+                        <label for="counter" class="stat-label">Total Reps</label>
+                        <div class="stat-value-container" id="counterContainer">
+                            <div class="stat-value" id="counter" role="status" aria-live="polite" tabindex="0">0</div>
+                            <div class="rep-badge" id="repBadge">REPS</div>
                         </div>
                     </div>
 
                     <div class="stat">
-                        <div class="stat-label">Arm Angle</div>
-                        <div class="angle-value" id="angleValue">--°</div>
+                        <label class="stat-label">Current Stage</label>
+                        <div class="stage-indicator">
+                            <div class="stage-content">
+                                <span id="stageText" aria-live="polite">Waiting...</span>
+                                <div class="stage-progress" id="stageProgress" role="progressbar" aria-valuemin="0"
+                                    aria-valuemax="100" aria-valuenow="50"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat">
+                        <label for="angleValue" class="stat-label">Arm Angle</label>
+                        <div class="angle-visual">
+                            <div class="angle-circle">
+                                <div class="angle-circle-fill" id="angleCircleFill"></div>
+                                <div class="angle-circle-text" id="angleValue" aria-live="polite">--°</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -69,49 +125,79 @@
                 <div class="controls-card">
                     <h2>⚙️ Controls</h2>
 
-                    <div class="controls">
-                        <button id="resetBtn" class="btn btn-reset">
-                            <span class="btn-icon">🔄</span>
-                            Reset Counter
+                    <div class="controls-grid">
+                        <button id="resetBtn" class="btn btn-reset" aria-label="Reset counter to zero">
+                            <span class="btn-icon" aria-hidden="true">🔄</span>
+                            <span class="btn-text">Reset</span>
                         </button>
 
-                        <button id="cameraBtn" class="btn btn-camera">
-                            <span class="btn-icon">📸</span>
-                            Toggle Camera
+                        <button id="cameraBtn" class="btn btn-camera" aria-label="Start or stop camera">
+                            <span class="btn-icon" aria-hidden="true">📷</span>
+                            <span class="btn-text">Camera</span>
                         </button>
 
-                        <button id="apiToggle" class="btn btn-api">
-                            <span class="btn-icon">🌐</span>
-                            Switch to Local
+                        <button id="apiToggle" class="btn btn-api"
+                            aria-label="Switch between API and browser processing">
+                            <span class="btn-icon" aria-hidden="true">🌐</span>
+                            <span class="btn-text">API Mode</span>
+                        </button>
+
+                        <button id="drawToggle" class="btn btn-draw" aria-label="Show or hide skeleton overlay">
+                            <span class="btn-icon" aria-hidden="true">🦴</span>
+                            <span class="btn-text">Skeleton</span>
                         </button>
                     </div>
 
                     <div class="status-grid">
                         <div class="status-item">
                             <span class="status-label">Camera:</span>
-                            <span class="status-value" id="cameraStatus">Initializing...</span>
+                            <span class="status-value" id="cameraStatus" aria-live="polite">Initializing...</span>
                         </div>
                         <div class="status-item">
                             <span class="status-label">API Latency:</span>
-                            <span class="status-value" id="apiLatency">-- ms</span>
+                            <span class="status-value" id="apiLatency" aria-live="polite">-- ms</span>
                         </div>
                         <div class="status-item">
                             <span class="status-label">FPS:</span>
-                            <span class="status-value" id="fpsCounter">--</span>
+                            <span class="status-value" id="fpsCounter" aria-live="polite">--</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Battery:</span>
+                            <span class="status-value" id="batteryStatus" aria-live="polite">--%</span>
                         </div>
                     </div>
                 </div>
 
+                <!-- Mobile Quick Actions -->
+                <div class="mobile-actions" id="mobileActions">
+                    <button class="mobile-btn" id="quickReset" aria-label="Quick reset counter">
+                        <span>🔄 Reset</span>
+                    </button>
+                    <button class="mobile-btn" id="quickCamera" aria-label="Quick camera toggle">
+                        <span>📷 Camera</span>
+                    </button>
+                    <button class="mobile-btn" id="quickMode" aria-label="Quick mode switch">
+                        <span>🌐 API/Browser</span>
+                    </button>
+                </div>
+
                 <!-- Info Card -->
                 <div class="info-card">
-                    <h2>ℹ️ System Info</h2>
-                    <ul>
-                        <li><strong>Backend:</strong> Python + OpenCV + MediaPipe</li>
-                        <li><strong>Frontend:</strong> HTML5 Camera API</li>
-                        <li><strong>Processing:</strong> Serverless API on Vercel</li>
-                        <li><strong>Detection:</strong> Real-time pose estimation</li>
-                        <li><strong>Privacy:</strong> Images processed on server, not stored</li>
-                    </ul>
+                    <details>
+                        <summary>
+                            <h2 class="info-summary">ℹ️ System Info</h2>
+                        </summary>
+                        <div class="info-content">
+                            <ul>
+                                <li><strong>Backend:</strong> Python + OpenCV + MediaPipe</li>
+                                <li><strong>Frontend:</strong> HTML5 Camera API</li>
+                                <li><strong>Processing:</strong> Serverless API on Vercel</li>
+                                <li><strong>Detection:</strong> Real-time pose estimation</li>
+                                <li><strong>Features:</strong> Motion trails, angle arcs, skeleton overlay</li>
+                                <li><strong>Privacy:</strong> Images processed on server, not stored</li>
+                            </ul>
+                        </div>
+                    </details>
                 </div>
             </div>
         </div>
@@ -119,8 +205,11 @@
         <footer>
             <p>Built with Python + MediaPipe | Deployed on Vercel Serverless</p>
             <p class="footer-note">Note: First request may be slow due to serverless cold start</p>
+            <p class="mobile-note">📱 Optimized for mobile devices</p>
         </footer>
     </div>
+
+    <div class="vibration-feedback" id="vibrationFeedback" aria-hidden="true"></div>
 
     <script src="script.js"></script>
 </body>
