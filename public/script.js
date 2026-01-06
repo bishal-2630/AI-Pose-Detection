@@ -1,4 +1,4 @@
-// script.js - Mirror view with correct rep counting - Fixed camera issue
+// script.js - Mirror view with single hand rep counting
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
@@ -14,11 +14,12 @@ const leftStageText = document.getElementById('leftStageText');
 const rightStageText = document.getElementById('rightStageText');
 const leftStageIndicator = document.getElementById('leftStageIndicator');
 const rightStageIndicator = document.getElementById('rightStageIndicator');
-const repsCounterElement = document.getElementById('repsCounter');
+const totalRepsElement = document.getElementById('totalReps');
 const totalCounterElement = document.getElementById('totalCounter');
 const mobileLeftAngle = document.getElementById('mobileLeftAngle');
 const mobileRightAngle = document.getElementById('mobileRightAngle');
-const mobilePoints = document.getElementById('mobilePoints');
+const mobileTotalPoints = document.getElementById('mobileTotalPoints');
+const landmarkCount = document.getElementById('landmarkCount');
 const detectedPoints = document.getElementById('detectedPoints');
 const landmarksProgress = document.getElementById('landmarksProgress');
 const poseStatus = document.getElementById('poseStatus');
@@ -32,12 +33,14 @@ const resetBtn = document.getElementById('resetBtn');
 const apiToggleBtn = document.getElementById('apiToggle');
 
 // State variables
+let leftArmCounter = 0;
+let rightArmCounter = 0;
 let totalReps = 0;
-let leftArmState = { stage: null, hasCounted: false };
-let rightArmState = { stage: null, hasCounted: false };
+let leftStageState = null;
+let rightStageState = null;
 let leftArmAngle = 0;
 let rightArmAngle = 0;
-let useAPI = false; // Default to browser mode
+let useAPI = true;
 let pose = null;
 let camera = null;
 let mediaStream = null;
@@ -45,7 +48,8 @@ let frameCount = 0;
 let fps = 0;
 let landmarks = null;
 let detectionConfidence = 0;
-let isInitialized = false;
+let lastRepTime = 0;
+let repCooldown = 1000; // 1 second cooldown between reps
 
 // Colors for mirror view (screen perspective)
 const COLORS = {
@@ -53,7 +57,7 @@ const COLORS = {
     rightSide: '#4CC9F0',     // Blue for right side (screen right in mirror)
     center: '#FFD166',        // Yellow for center points
     connections: '#118AB2',   // Blue for skeleton lines
-    angleArc: '#06D6A0'       // Green for angle arcs
+    angleArc: '#06D6A0'      // Green for angle arcs
 };
 
 // MediaPipe landmark indices (person's perspective)
@@ -69,16 +73,16 @@ const LANDMARK_INDICES = {
     RIGHT_HIP: 24
 };
 
-// Skeleton connections (person's perspective)
+// Skeleton connections for arms only
 const SKELETON_CONNECTIONS = [
+    // Upper body
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.RIGHT_SHOULDER],
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_ELBOW],
     [LANDMARK_INDICES.LEFT_ELBOW, LANDMARK_INDICES.LEFT_WRIST],
     [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_ELBOW],
     [LANDMARK_INDICES.RIGHT_ELBOW, LANDMARK_INDICES.RIGHT_WRIST],
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_HIP],
-    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDices.RIGHT_HIP],
-    [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.RIGHT_HIP]
+    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_HIP]
 ];
 
 // ==================== MEDIAPIPE INITIALIZATION ====================
@@ -87,10 +91,10 @@ async function initializeMediaPipe() {
     try {
         updateStatus('Loading pose detection...');
         
-        // Load MediaPipe dynamically
+        // Load MediaPipe
         if (typeof window.Pose === 'undefined') {
-            console.log('Loading MediaPipe scripts...');
-            await loadMediaPipeScripts();
+            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');
+            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
         }
         
         // Initialize MediaPipe Pose
@@ -110,41 +114,24 @@ async function initializeMediaPipe() {
         
         pose.onResults(onPoseResults);
         
-        console.log('MediaPipe initialized successfully');
-        updateStatus('MediaPipe loaded');
+        updateStatus('Ready for detection');
         return true;
         
     } catch (error) {
-        console.error('MediaPipe initialization error:', error);
-        updateStatus('Failed to initialize MediaPipe');
+        console.error('MediaPipe error:', error);
+        updateStatus('Failed to initialize');
         return false;
     }
 }
 
-async function loadMediaPipeScripts() {
-    const scripts = [
-        'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js',
-        'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js'
-    ];
-    
-    const loadPromises = scripts.map(src => {
-        return new Promise((resolve, reject) => {
-            // Check if script is already loaded
-            if (document.querySelector(`script[src="${src}"]`)) {
-                resolve();
-                return;
-            }
-            
-            const script = document.createElement('script');
-            script.src = src;
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
     });
-    
-    await Promise.all(loadPromises);
-    console.log('All MediaPipe scripts loaded');
 }
 
 // ==================== POSE DETECTION & VISUALIZATION ====================
@@ -176,7 +163,6 @@ function onPoseResults(results) {
 }
 
 function countDetectedLandmarks(landmarks) {
-    if (!landmarks) return 0;
     return landmarks.filter(landmark => 
         landmark && landmark.visibility && landmark.visibility > 0.1
     ).length;
@@ -191,22 +177,20 @@ function calculateConfidence(results) {
 }
 
 function drawSkeleton(results) {
-    if (!results.poseLandmarks) return;
-    
     const videoWidth = overlayCanvas.width;
     const videoHeight = overlayCanvas.height;
     
     // Clear canvas
     canvasCtx.clearRect(0, 0, videoWidth, videoHeight);
     
-    // Draw skeleton connections
+    // Draw all connections
     drawConnections(results.poseLandmarks, videoWidth, videoHeight);
     
-    // Draw key landmarks
-    drawKeyLandmarks(results.poseLandmarks, videoWidth, videoHeight);
+    // Draw key landmarks only
+    drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
     
-    // Draw arm angles
-    drawArmAngles(results.poseLandmarks, videoWidth, videoHeight);
+    // Draw reps counter on canvas (top left corner)
+    drawRepsCounter(videoWidth, videoHeight);
 }
 
 function drawConnections(landmarks, width, height) {
@@ -259,9 +243,9 @@ function drawLine(start, end, width, height, color) {
     canvasCtx.stroke();
 }
 
-function drawKeyLandmarks(landmarks, width, height) {
-    // Only draw key landmarks for arms and shoulders
-    const keyLandmarks = [
+function drawLandmarks(landmarks, width, height) {
+    // Draw only key points
+    const keyPoints = [
         LANDMARK_INDICES.LEFT_SHOULDER,
         LANDMARK_INDICES.RIGHT_SHOULDER,
         LANDMARK_INDICES.LEFT_ELBOW,
@@ -270,27 +254,24 @@ function drawKeyLandmarks(landmarks, width, height) {
         LANDMARK_INDICES.RIGHT_WRIST
     ];
     
-    keyLandmarks.forEach(index => {
+    keyPoints.forEach(index => {
         const landmark = landmarks[index];
         if (landmark && landmark.visibility > 0.1) {
             // Mirror view: flip X coordinate
             const mirroredX = width - (landmark.x * width);
             const y = landmark.y * height;
             
-            // Determine color based on side (mirror view)
+            // Determine color based on side
             let color, size = 8;
             
-            // Person's right = screen left (red)
             if (index === LANDMARK_INDICES.RIGHT_SHOULDER || 
                 index === LANDMARK_INDICES.RIGHT_ELBOW || 
                 index === LANDMARK_INDICES.RIGHT_WRIST) {
-                color = COLORS.leftSide;
-            }
-            // Person's left = screen right (blue)
-            else if (index === LANDMARK_INDICES.LEFT_SHOULDER || 
-                     index === LANDMARK_INDICES.LEFT_ELBOW || 
-                     index === LANDMARK_INDICES.LEFT_WRIST) {
-                color = COLORS.rightSide;
+                color = COLORS.leftSide; // Screen left = red
+            } else if (index === LANDMARK_INDICES.LEFT_SHOULDER || 
+                      index === LANDMARK_INDICES.LEFT_ELBOW || 
+                      index === LANDMARK_INDICES.LEFT_WRIST) {
+                color = COLORS.rightSide; // Screen right = blue
             }
             
             drawPoint(mirroredX, y, color, size);
@@ -318,58 +299,27 @@ function drawPoint(x, y, color, size) {
     canvasCtx.fill();
 }
 
-function drawArmAngles(landmarks, width, height) {
-    // Draw left arm angle (screen left = person's right)
-    const leftShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
-    const leftElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
-    const leftWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
+function drawRepsCounter(width, height) {
+    // Draw background box
+    canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    canvasCtx.fillRect(20, 20, 180, 80);
     
-    if (leftShoulder && leftElbow && leftWrist && 
-        leftShoulder.visibility > 0.3 && 
-        leftElbow.visibility > 0.3 && 
-        leftWrist.visibility > 0.3) {
-        drawAngleArc(leftShoulder, leftElbow, leftWrist, width, height, COLORS.leftSide);
-    }
+    // Draw border
+    canvasCtx.strokeStyle = '#00dbde';
+    canvasCtx.lineWidth = 2;
+    canvasCtx.strokeRect(20, 20, 180, 80);
     
-    // Draw right arm angle (screen right = person's left)
-    const rightShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
-    const rightElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
-    const rightWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
+    // Draw "REPS" label
+    canvasCtx.fillStyle = '#FFFFFF';
+    canvasCtx.font = 'bold 16px Arial';
+    canvasCtx.textAlign = 'left';
+    canvasCtx.fillText('BICEP CURL REPS', 35, 45);
     
-    if (rightShoulder && rightElbow && rightWrist && 
-        rightShoulder.visibility > 0.3 && 
-        rightElbow.visibility > 0.3 && 
-        rightWrist.visibility > 0.3) {
-        drawAngleArc(rightShoulder, rightElbow, rightWrist, width, height, COLORS.rightSide);
-    }
-}
-
-function drawAngleArc(shoulder, elbow, wrist, width, height, color) {
-    // Mirror view: flip X coordinate
-    const elbowX = width - (elbow.x * width);
-    const elbowY = elbow.y * height;
-    
-    // Calculate angle
-    const angle = calculateAngle(shoulder, elbow, wrist);
-    const radius = 30;
-    
-    // Calculate arc angles (adjusted for mirror view)
-    const startAngle = Math.atan2(
-        shoulder.y - elbow.y,
-        (width - shoulder.x * width) - elbowX
-    );
-    const endAngle = Math.atan2(
-        wrist.y - elbow.y,
-        (width - wrist.x * width) - elbowX
-    );
-    
-    // Draw arc
-    canvasCtx.beginPath();
-    canvasCtx.arc(elbowX, elbowY, radius, startAngle, endAngle);
-    canvasCtx.strokeStyle = angle < 90 ? COLORS.angleArc : color;
-    canvasCtx.lineWidth = 4;
-    canvasCtx.lineCap = 'round';
-    canvasCtx.stroke();
+    // Draw total reps count
+    canvasCtx.fillStyle = '#00dbde';
+    canvasCtx.font = 'bold 36px Arial';
+    canvasCtx.textAlign = 'center';
+    canvasCtx.fillText(totalReps.toString(), 110, 85);
 }
 
 function clearCanvas() {
@@ -379,8 +329,6 @@ function clearCanvas() {
 // ==================== ARM ANGLE CALCULATION ====================
 
 function calculateArmAngles(landmarks) {
-    if (!landmarks) return;
-    
     // Calculate left arm angle (screen left = person's right)
     const leftShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const leftElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
@@ -398,7 +346,7 @@ function calculateArmAngles(landmarks) {
         leftWrist.visibility > 0.3) {
         leftArmAngle = calculateAngle(leftShoulder, leftElbow, leftWrist);
         updateLeftArmUI(leftArmAngle);
-        countCurl(leftArmAngle, 'left');
+        countReps('left', leftArmAngle);
     } else {
         leftArmAngle = 0;
         updateLeftArmUI(0, false);
@@ -411,7 +359,7 @@ function calculateArmAngles(landmarks) {
         rightWrist.visibility > 0.3) {
         rightArmAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
         updateRightArmUI(rightArmAngle);
-        countCurl(rightArmAngle, 'right');
+        countReps('right', rightArmAngle);
     } else {
         rightArmAngle = 0;
         updateRightArmUI(0, false);
@@ -433,47 +381,45 @@ function calculateAngle(a, b, c) {
     return angle;
 }
 
-function countCurl(angle, arm) {
-    let state = arm === 'left' ? leftArmState : rightArmState;
-    let color = arm === 'left' ? '#FF6B6B' : '#4CC9F0';
-    let stageElement = arm === 'left' ? leftStage : rightStage;
-    let stageText = arm === 'left' ? leftStageText : rightStageText;
-    let indicator = arm === 'left' ? leftStageIndicator : rightStageIndicator;
+function countReps(side, angle) {
+    const currentTime = Date.now();
+    const timeSinceLastRep = currentTime - lastRepTime;
     
-    // Reset hasCounted when arm goes down
-    if (angle > 160) {
-        state.stage = "down";
-        state.hasCounted = false;
-        updateStageUI(stageElement, stageText, "DOWN", color);
-        updateStageProgress(indicator, 1);
-    }
-    
-    // Count rep when arm goes up and hasn't been counted yet in this cycle
-    if (angle < 40 && state.stage === "down" && !state.hasCounted) {
-        state.stage = "up";
-        state.hasCounted = true;
-        totalReps++;
-        updateCounters();
-        updateStageUI(stageElement, stageText, "UP", '#EF476F');
-        updateStageProgress(indicator, 0);
+    if (side === 'left') {
+        if (angle > 160) {
+            leftStageState = "down";
+            updateLeftStage("DOWN", "#FF6B6B");
+            updateLeftStageProgress(1);
+        }
         
-        // Animate the gauge
-        if (arm === 'left') {
+        if (angle < 40 && leftStageState === "down" && timeSinceLastRep > repCooldown) {
+            leftStageState = "up";
+            leftArmCounter++;
+            totalReps++;
+            lastRepTime = currentTime;
+            updateCounters();
+            updateLeftStage("UP", "#EF476F");
+            updateLeftStageProgress(0);
             animateLeftRep();
-        } else {
+        }
+    } else if (side === 'right') {
+        if (angle > 160) {
+            rightStageState = "down";
+            updateRightStage("DOWN", "#4CC9F0");
+            updateRightStageProgress(1);
+        }
+        
+        if (angle < 40 && rightStageState === "down" && timeSinceLastRep > repCooldown) {
+            rightStageState = "up";
+            rightArmCounter++;
+            totalReps++;
+            lastRepTime = currentTime;
+            updateCounters();
+            updateRightStage("UP", "#EF476F");
+            updateRightStageProgress(0);
             animateRightRep();
         }
     }
-}
-
-function updateStageUI(stageElement, stageText, text, color) {
-    stageElement.textContent = text;
-    stageText.textContent = text;
-    stageText.style.color = color;
-}
-
-function updateStageProgress(indicator, progress) {
-    indicator.style.width = `${progress * 100}%`;
 }
 
 // ==================== UI UPDATES ====================
@@ -483,8 +429,8 @@ function updateLeftArmUI(angle, visible = true) {
     leftAngleValue.textContent = `${roundedAngle}°`;
     mobileLeftAngle.textContent = `${roundedAngle}°`;
     
-    if (visible && angle > 0) {
-        const circlePercent = Math.min((angle / 180) * 360, 360);
+    if (visible) {
+        const circlePercent = (angle / 180) * 360;
         leftAngleFill.style.background = 
             `conic-gradient(from 0deg, #FF6B6B 0deg, #FF6B6B ${circlePercent}deg, transparent ${circlePercent}deg, transparent 360deg)`;
     }
@@ -495,49 +441,60 @@ function updateRightArmUI(angle, visible = true) {
     rightAngleValue.textContent = `${roundedAngle}°`;
     mobileRightAngle.textContent = `${roundedAngle}°`;
     
-    if (visible && angle > 0) {
-        const circlePercent = Math.min((angle / 180) * 360, 360);
+    if (visible) {
+        const circlePercent = (angle / 180) * 360;
         rightAngleFill.style.background = 
             `conic-gradient(from 0deg, #4CC9F0 0deg, #4CC9F0 ${circlePercent}deg, transparent ${circlePercent}deg, transparent 360deg)`;
     }
 }
 
+function updateLeftStage(text, color) {
+    leftStage.textContent = text;
+    leftStageText.textContent = text;
+    leftStageText.style.color = color;
+}
+
+function updateRightStage(text, color) {
+    rightStage.textContent = text;
+    rightStageText.textContent = text;
+    rightStageText.style.color = color;
+}
+
+function updateLeftStageProgress(progress) {
+    leftStageIndicator.style.width = `${progress * 100}%`;
+}
+
+function updateRightStageProgress(progress) {
+    rightStageIndicator.style.width = `${progress * 100}%`;
+}
+
 function updateCounters() {
-    repsCounterElement.textContent = totalReps;
+    totalRepsElement.textContent = totalReps;
     totalCounterElement.textContent = totalReps;
     
     // Add animation
-    repsCounterElement.classList.add('rep-animation');
     totalCounterElement.classList.add('rep-animation');
-    setTimeout(() => {
-        repsCounterElement.classList.remove('rep-animation');
-        totalCounterElement.classList.remove('rep-animation');
-    }, 500);
+    setTimeout(() => totalCounterElement.classList.remove('rep-animation'), 500);
 }
 
 function animateLeftRep() {
-    const leftGauge = document.querySelector('.left-angle');
-    if (leftGauge) {
-        leftGauge.classList.add('highlight-active');
-        setTimeout(() => {
-            leftGauge.classList.remove('highlight-active');
-        }, 1000);
-    }
+    document.querySelector('.left-angle').classList.add('highlight-active');
+    setTimeout(() => {
+        document.querySelector('.left-angle').classList.remove('highlight-active');
+    }, 1000);
 }
 
 function animateRightRep() {
-    const rightGauge = document.querySelector('.right-angle');
-    if (rightGauge) {
-        rightGauge.classList.add('highlight-active');
-        setTimeout(() => {
-            rightGauge.classList.remove('highlight-active');
-        }, 1000);
-    }
+    document.querySelector('.right-angle').classList.add('highlight-active');
+    setTimeout(() => {
+        document.querySelector('.right-angle').classList.remove('highlight-active');
+    }, 1000);
 }
 
 function updateLandmarkStats(count) {
     detectedPoints.textContent = count;
-    mobilePoints.textContent = `${count}/33`;
+    landmarkCount.textContent = `Points: ${count}/33`;
+    mobileTotalPoints.textContent = count;
     
     const percent = (count / 33) * 100;
     landmarksProgress.style.width = `${percent}%`;
@@ -581,22 +538,23 @@ function toggleProcessingMode() {
 }
 
 function resetAll() {
+    leftArmCounter = 0;
+    rightArmCounter = 0;
     totalReps = 0;
-    leftArmState = { stage: null, hasCounted: false };
-    rightArmState = { stage: null, hasCounted: false };
+    leftStageState = null;
+    rightStageState = null;
+    lastRepTime = 0;
     
     updateCounters();
-    updateStageUI(leftStage, leftStageText, '--', '#a0a0c0');
-    updateStageUI(rightStage, rightStageText, '--', '#a0a0c0');
-    updateStageProgress(leftStageIndicator, 0);
-    updateStageProgress(rightStageIndicator, 0);
+    updateLeftStage('--', '#a0a0c0');
+    updateRightStage('--', '#a0a0c0');
+    updateLeftStageProgress(0);
+    updateRightStageProgress(0);
     clearCanvas();
     
     // Visual feedback
-    repsCounterElement.style.color = '#FF6B6B';
     totalCounterElement.style.color = '#FF6B6B';
     setTimeout(() => {
-        repsCounterElement.style.color = '#FFFFFF';
         totalCounterElement.style.color = '#00dbde';
     }, 300);
 }
@@ -605,124 +563,60 @@ function resetAll() {
 
 async function startCamera() {
     try {
-        updateStatus('Requesting camera access...');
+        updateStatus('Starting camera...');
         
-        // First get camera access
+        await initializeMediaPipe();
+        
+        // Request camera access
         mediaStream = await navigator.mediaDevices.getUserMedia({
             video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
                 facingMode: 'user',
                 frameRate: { ideal: 30 }
             },
             audio: false
         });
         
+        // Set video source
         videoElement.srcObject = mediaStream;
-        
-        // Apply mirror effect
-        videoElement.style.transform = 'scaleX(-1)';
         
         // Wait for video to be ready
         await new Promise((resolve) => {
             videoElement.onloadedmetadata = () => {
-                console.log('Video ready. Dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+                // Set canvas size to match video
+                overlayCanvas.width = videoElement.videoWidth;
+                overlayCanvas.height = videoElement.videoHeight;
                 resolve();
             };
         });
         
-        // Set canvas size to match video
-        overlayCanvas.width = videoElement.videoWidth;
-        overlayCanvas.height = videoElement.videoHeight;
+        // Start MediaPipe processing
+        camera = new window.Camera(videoElement, {
+            onFrame: async () => {
+                if (pose) {
+                    await pose.send({ image: videoElement });
+                }
+            },
+            width: overlayCanvas.width,
+            height: overlayCanvas.height
+        });
         
-        updateStatus('Camera ready. Initializing pose detection...');
+        await camera.start();
+        updateStatus('Ready - Do bicep curls!');
         
-        // Initialize MediaPipe
-        const mediaPipeReady = await initializeMediaPipe();
-        if (!mediaPipeReady) {
-            throw new Error('Failed to initialize MediaPipe');
-        }
-        
-        // Start camera processing with MediaPipe
-        if (window.Camera) {
-            camera = new window.Camera(videoElement, {
-                onFrame: async () => {
-                    if (pose && isInitialized) {
-                        try {
-                            await pose.send({ image: videoElement });
-                        } catch (error) {
-                            console.error('Error sending frame to pose:', error);
-                        }
-                    }
-                },
-                width: videoElement.videoWidth,
-                height: videoElement.videoHeight
-            });
-            
-            await camera.start();
-            isInitialized = true;
-            updateStatus('Ready! Move your arms for bicep curls');
-            console.log('Camera and pose detection started successfully');
-            
-            // Start FPS counter
-            startFPSCounter();
-            
-        } else {
-            // Fallback: Use requestAnimationFrame for older browsers
-            console.log('Using fallback camera processing');
-            updateStatus('Using fallback mode');
-            startFallbackCamera();
-        }
+        // Start FPS counter
+        startFPSCounter();
         
     } catch (error) {
         console.error('Camera error:', error);
-        if (error.name === 'NotAllowedError') {
-            updateStatus('Camera access denied. Please allow camera access.');
-        } else if (error.name === 'NotFoundError') {
-            updateStatus('No camera found. Please connect a camera.');
-        } else {
-            updateStatus(`Camera error: ${error.message}`);
-        }
+        updateStatus('Camera access required - Please allow camera permissions');
         
-        // Show fallback message
-        showCameraFallback();
-    }
-}
-
-function startFallbackCamera() {
-    isInitialized = true;
-    function processFrame() {
-        if (pose && isInitialized) {
-            pose.send({ image: videoElement })
-                .catch(error => console.error('Pose processing error:', error));
+        // Show user-friendly error
+        if (error.name === 'NotAllowedError') {
+            alert('Please allow camera access to use this application. Refresh the page and click "Allow" when prompted.');
         }
-        requestAnimationFrame(processFrame);
     }
-    processFrame();
-}
-
-function showCameraFallback() {
-    // Create a fallback test pattern if camera fails
-    const fallbackMessage = document.createElement('div');
-    fallbackMessage.className = 'camera-fallback';
-    fallbackMessage.innerHTML = `
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
-            <div style="font-size: 48px;">📷</div>
-            <h3>Camera Access Required</h3>
-            <p>Please allow camera access to use pose detection</p>
-            <button id="retryCamera" style="margin-top: 20px; padding: 10px 20px; background: #4CC9F0; border: none; border-radius: 5px; color: white; cursor: pointer;">
-                Retry Camera
-            </button>
-        </div>
-    `;
-    
-    const videoContainer = document.querySelector('.video-container');
-    videoContainer.appendChild(fallbackMessage);
-    
-    document.getElementById('retryCamera').addEventListener('click', () => {
-        fallbackMessage.remove();
-        startCamera();
-    });
 }
 
 function startFPSCounter() {
@@ -741,13 +635,14 @@ function startFPSCounter() {
 apiToggleBtn.addEventListener('click', toggleProcessingMode);
 resetBtn.addEventListener('click', resetAll);
 
-// Counters tap to reset
-repsCounterElement.addEventListener('click', () => {
+// Total counter tap to reset
+totalCounterElement.addEventListener('click', () => {
     totalReps = 0;
     updateCounters();
 });
 
-totalCounterElement.addEventListener('click', () => {
+// Mobile summary tap to reset
+totalRepsElement.addEventListener('click', () => {
     totalReps = 0;
     updateCounters();
 });
@@ -755,43 +650,24 @@ totalCounterElement.addEventListener('click', () => {
 // ==================== INITIALIZATION ====================
 
 window.addEventListener('DOMContentLoaded', async () => {
-    console.log('Starting Pose Detection...');
+    console.log('Starting Bicep Curl Counter...');
     
-    // Update processing mode display
+    // Set canvas size initially
+    overlayCanvas.width = 640;
+    overlayCanvas.height = 480;
+    
+    await startCamera();
     updateProcessingMode();
     
-    // Start camera
-    await startCamera();
-    
-    console.log('System initialized successfully');
+    console.log('System ready - Single hand rep counting active');
 });
 
 // Cleanup
 window.addEventListener('beforeunload', () => {
     if (mediaStream) {
-        mediaStream.getTracks().forEach(track => {
-            track.stop();
-            console.log('Stopped track:', track.kind);
-        });
+        mediaStream.getTracks().forEach(track => track.stop());
     }
     if (camera) {
-        try {
-            camera.stop();
-            console.log('Camera stopped');
-        } catch (error) {
-            console.log('Camera already stopped');
-        }
-    }
-    isInitialized = false;
-});
-
-// Handle page visibility change
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        console.log('Page hidden - pausing detection');
-        isInitialized = false;
-    } else {
-        console.log('Page visible - resuming detection');
-        isInitialized = true;
+        camera.stop();
     }
 });
