@@ -1,4 +1,4 @@
-// script.js - Fixed camera and overlay issues
+// script.js - Fixed null reference errors
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
@@ -14,15 +14,12 @@ const leftStageText = document.getElementById('leftStageText');
 const rightStageText = document.getElementById('rightStageText');
 const leftStageIndicator = document.getElementById('leftStageIndicator');
 const rightStageIndicator = document.getElementById('rightStageIndicator');
-const totalRepsElement = document.getElementById('totalReps');
 const totalCounterElement = document.getElementById('totalCounter');
 const mobileLeftAngle = document.getElementById('mobileLeftAngle');
 const mobileRightAngle = document.getElementById('mobileRightAngle');
 const mobileTotalPoints = document.getElementById('mobileTotalPoints');
-const landmarkCount = document.getElementById('landmarkCount');
 const detectedPoints = document.getElementById('detectedPoints');
 const landmarksProgress = document.getElementById('landmarksProgress');
-const poseStatus = document.getElementById('poseStatus');
 const processingMode = document.getElementById('processingMode');
 const latencyDisplay = document.getElementById('latencyDisplay');
 const fpsCounter = document.getElementById('fpsCounter');
@@ -31,6 +28,7 @@ const detectionStatus = document.getElementById('detectionStatus');
 const armVisibility = document.getElementById('armVisibility');
 const resetBtn = document.getElementById('resetBtn');
 const apiToggleBtn = document.getElementById('apiToggle');
+const cameraStatus = document.getElementById('cameraStatus');
 
 // State variables
 let leftArmCounter = 0;
@@ -48,7 +46,7 @@ let fps = 0;
 let landmarks = null;
 let detectionConfidence = 0;
 let lastRepTime = 0;
-let repCooldown = 1000; // 1 second cooldown between reps
+let repCooldown = 1000;
 let lastFrameTime = 0;
 let animationFrameId = null;
 
@@ -82,12 +80,10 @@ async function initializeMediaPipe() {
         
         // Check if MediaPipe is already loaded
         if (typeof window.Pose === 'undefined') {
-            // Load MediaPipe from CDN
             const poseScript = document.createElement('script');
             poseScript.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
             document.head.appendChild(poseScript);
             
-            // Wait for Pose to be available
             await new Promise(resolve => {
                 poseScript.onload = resolve;
             });
@@ -126,12 +122,10 @@ async function startCamera() {
     try {
         updateStatus('Requesting camera access...');
         
-        // Stop any existing stream
         if (mediaStream) {
             mediaStream.getTracks().forEach(track => track.stop());
         }
         
-        // Get camera access
         mediaStream = await navigator.mediaDevices.getUserMedia({
             video: {
                 width: { ideal: 640 },
@@ -142,16 +136,14 @@ async function startCamera() {
             audio: false
         });
         
-        // Set video source
         videoElement.srcObject = mediaStream;
         
-        // Wait for video to load
         await new Promise((resolve) => {
             videoElement.onloadedmetadata = () => {
-                // Set canvas dimensions to match video
                 overlayCanvas.width = videoElement.videoWidth;
                 overlayCanvas.height = videoElement.videoHeight;
                 console.log(`Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
+                updateStatus('Camera ready - Start exercising!');
                 resolve();
             };
             videoElement.onerror = () => {
@@ -161,15 +153,8 @@ async function startCamera() {
             };
         });
         
-        // Start pose detection
         await initializeMediaPipe();
-        
-        // Start processing frames
         startFrameProcessing();
-        
-        updateStatus('Camera ready - Start exercising!');
-        
-        // Start FPS counter
         startFPSCounter();
         
     } catch (error) {
@@ -191,17 +176,13 @@ function startFrameProcessing() {
     }
     
     function processFrame() {
-        if (videoElement.readyState >= 2 && pose) { // HAVE_CURRENT_DATA or better
-            // Process the current video frame
+        if (videoElement.readyState >= 2 && pose) {
             pose.send({image: videoElement});
             frameCount++;
         }
-        
-        // Continue processing
         animationFrameId = requestAnimationFrame(processFrame);
     }
     
-    // Start processing
     processFrame();
 }
 
@@ -225,21 +206,16 @@ function onPoseResults(results) {
         landmarks = results.poseLandmarks;
         detectionConfidence = calculateConfidence(results);
         
-        // Count detected landmarks
         const detectedCount = countDetectedLandmarks(landmarks);
         updateLandmarkStats(detectedCount);
         
-        // Draw skeleton and reps counter
         drawSkeleton(results);
-        
-        // Calculate and display both arm angles
         calculateArmAngles(landmarks);
         
         updateStatus(`${detectedCount} points detected`);
     } else {
         landmarks = null;
         clearCanvas();
-        // Still draw reps counter even without landmarks
         drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
         updateLandmarkStats(0);
         updateStatus('Move into frame');
@@ -265,16 +241,13 @@ function drawSkeleton(results) {
     const width = overlayCanvas.width;
     const height = overlayCanvas.height;
     
-    // Clear canvas
     canvasCtx.clearRect(0, 0, width, height);
     
-    // Draw skeleton if landmarks exist
     if (results.poseLandmarks) {
         drawConnections(results.poseLandmarks, width, height);
         drawKeyLandmarks(results.poseLandmarks, width, height);
     }
     
-    // Always draw reps counter
     drawRepsCounter(width, height);
 }
 
@@ -282,7 +255,6 @@ function drawConnections(landmarks, width, height) {
     canvasCtx.lineWidth = 3;
     canvasCtx.lineCap = 'round';
     
-    // Draw shoulder connection
     const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
     const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     
@@ -291,23 +263,21 @@ function drawConnections(landmarks, width, height) {
         drawLine(leftShoulder, rightShoulder, width, height, COLORS.connections);
     }
     
-    // Draw left arm
     const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
     const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
     
     if (leftShoulder && leftElbow && leftShoulder.visibility > 0.1 && leftElbow.visibility > 0.1) {
-        drawLine(leftShoulder, leftElbow, width, height, COLORS.rightSide); // Right side in mirror
+        drawLine(leftShoulder, leftElbow, width, height, COLORS.rightSide);
     }
     if (leftElbow && leftWrist && leftElbow.visibility > 0.1 && leftWrist.visibility > 0.1) {
         drawLine(leftElbow, leftWrist, width, height, COLORS.rightSide);
     }
     
-    // Draw right arm
     const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
     const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
     
     if (rightShoulder && rightElbow && rightShoulder.visibility > 0.1 && rightElbow.visibility > 0.1) {
-        drawLine(rightShoulder, rightElbow, width, height, COLORS.leftSide); // Left side in mirror
+        drawLine(rightShoulder, rightElbow, width, height, COLORS.leftSide);
     }
     if (rightElbow && rightWrist && rightElbow.visibility > 0.1 && rightWrist.visibility > 0.1) {
         drawLine(rightElbow, rightWrist, width, height, COLORS.leftSide);
@@ -315,7 +285,6 @@ function drawConnections(landmarks, width, height) {
 }
 
 function drawLine(start, end, width, height, color) {
-    // Mirror view: flip X coordinate
     const startX = width - (start.x * width);
     const startY = start.y * height;
     const endX = width - (end.x * width);
@@ -329,7 +298,6 @@ function drawLine(start, end, width, height, color) {
 }
 
 function drawKeyLandmarks(landmarks, width, height) {
-    // Draw shoulder points
     const points = [
         {index: LANDMARK_INDICES.LEFT_SHOULDER, color: COLORS.rightSide, label: 'L'},
         {index: LANDMARK_INDICES.RIGHT_SHOULDER, color: COLORS.leftSide, label: 'R'},
@@ -342,23 +310,19 @@ function drawKeyLandmarks(landmarks, width, height) {
     points.forEach(point => {
         const landmark = landmarks[point.index];
         if (landmark && landmark.visibility > 0.1) {
-            // Mirror view: flip X coordinate
             const x = width - (landmark.x * width);
             const y = landmark.y * height;
             
-            // Draw point
             canvasCtx.beginPath();
             canvasCtx.arc(x, y, 8, 0, 2 * Math.PI);
             canvasCtx.fillStyle = point.color;
             canvasCtx.fill();
             
-            // White center
             canvasCtx.beginPath();
             canvasCtx.arc(x, y, 3, 0, 2 * Math.PI);
             canvasCtx.fillStyle = '#FFFFFF';
             canvasCtx.fill();
             
-            // Draw label
             canvasCtx.fillStyle = '#FFFFFF';
             canvasCtx.font = 'bold 10px Arial';
             canvasCtx.textAlign = 'center';
@@ -369,7 +333,6 @@ function drawKeyLandmarks(landmarks, width, height) {
 }
 
 function drawRepsCounter(width, height) {
-    // Draw background box
     const boxWidth = 200;
     const boxHeight = 80;
     const padding = 20;
@@ -377,24 +340,20 @@ function drawRepsCounter(width, height) {
     canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     canvasCtx.fillRect(padding, padding, boxWidth, boxHeight);
     
-    // Draw border
     canvasCtx.strokeStyle = '#00dbde';
     canvasCtx.lineWidth = 3;
     canvasCtx.strokeRect(padding, padding, boxWidth, boxHeight);
     
-    // Draw "REPS" label
     canvasCtx.fillStyle = '#FFFFFF';
     canvasCtx.font = 'bold 18px Arial';
     canvasCtx.textAlign = 'left';
     canvasCtx.fillText('BICEP CURL REPS', padding + 10, padding + 30);
     
-    // Draw total reps count
     canvasCtx.fillStyle = '#00dbde';
     canvasCtx.font = 'bold 40px Arial';
     canvasCtx.textAlign = 'center';
     canvasCtx.fillText(totalReps.toString(), padding + boxWidth/2, padding + 65);
     
-    // Draw small indicator for active detection
     if (landmarks && landmarks.length > 0) {
         canvasCtx.fillStyle = '#06D6A0';
         canvasCtx.beginPath();
@@ -410,17 +369,14 @@ function clearCanvas() {
 // ==================== ARM ANGLE CALCULATION ====================
 
 function calculateArmAngles(landmarks) {
-    // Calculate left arm angle (screen left = person's right)
     const leftShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const leftElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
     const leftWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
     
-    // Calculate right arm angle (screen right = person's left)
     const rightShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
     const rightElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
     const rightWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
     
-    // Update left arm
     if (leftShoulder && leftElbow && leftWrist && 
         leftShoulder.visibility > 0.3 && 
         leftElbow.visibility > 0.3 && 
@@ -433,7 +389,6 @@ function calculateArmAngles(landmarks) {
         updateLeftArmUI(0, false);
     }
     
-    // Update right arm
     if (rightShoulder && rightElbow && rightWrist && 
         rightShoulder.visibility > 0.3 && 
         rightElbow.visibility > 0.3 && 
@@ -446,7 +401,6 @@ function calculateArmAngles(landmarks) {
         updateRightArmUI(0, false);
     }
     
-    // Update arm visibility status
     updateArmVisibility(leftShoulder && rightShoulder);
 }
 
@@ -550,10 +504,8 @@ function updateRightStageProgress(progress) {
 }
 
 function updateCounters() {
-    totalRepsElement.textContent = totalReps;
     totalCounterElement.textContent = totalReps;
     
-    // Add animation
     totalCounterElement.classList.add('rep-animation');
     setTimeout(() => totalCounterElement.classList.remove('rep-animation'), 500);
 }
@@ -574,7 +526,6 @@ function animateRightRep() {
 
 function updateLandmarkStats(count) {
     detectedPoints.textContent = count;
-    landmarkCount.textContent = `Points: ${count}/33`;
     mobileTotalPoints.textContent = count;
     
     const percent = (count / 33) * 100;
@@ -596,8 +547,10 @@ function updateArmVisibility(bothVisible) {
 }
 
 function updateStatus(message) {
-    poseStatus.textContent = message;
     detectionStatus.textContent = message;
+    if (cameraStatus) {
+        cameraStatus.textContent = message;
+    }
 }
 
 function updateLatency(latency) {
@@ -633,10 +586,8 @@ function resetAll() {
     updateRightStageProgress(0);
     clearCanvas();
     
-    // Draw empty reps counter
     drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
     
-    // Visual feedback
     totalCounterElement.style.color = '#FF6B6B';
     setTimeout(() => {
         totalCounterElement.style.color = '#00dbde';
@@ -655,23 +606,14 @@ totalCounterElement.addEventListener('click', () => {
     drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
 });
 
-// Mobile summary tap to reset
-totalRepsElement.addEventListener('click', () => {
-    totalReps = 0;
-    updateCounters();
-    drawRepsCounter(overlayCanvas.width, overlayCanvas.height);
-});
-
 // ==================== INITIALIZATION ====================
 
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('Starting Bicep Curl Counter...');
     
-    // Set initial canvas size
     overlayCanvas.width = 640;
     overlayCanvas.height = 480;
     
-    // Start camera
     await startCamera();
     updateProcessingMode();
     
