@@ -13,29 +13,45 @@
         <header>
             <h1>🤸 Full Body Pose Detection</h1>
             <p class="subtitle">Real-time dual arm angle tracking with correct left/right mapping</p>
+
+            <!-- Moved angles and points below title -->
+            <div class="title-stats">
+                <div class="title-angles">
+                    <div class="title-angle-group">
+                        <div class="title-angle-item">
+                            <span class="title-angle-label">Left Arm:</span>
+                            <span id="leftAngleTitle" class="title-angle-value">--°</span>
+                        </div>
+                        <div class="title-angle-item">
+                            <span class="title-angle-label">Right Arm:</span>
+                            <span id="rightAngleTitle" class="title-angle-value">--°</span>
+                        </div>
+                    </div>
+                    <div class="title-points">
+                        <span id="landmarkTitle" class="title-points-value">Points: 0/33</span>
+                    </div>
+                </div>
+            </div>
         </header>
 
         <div class="content">
             <!-- Video Feed -->
             <div class="video-section">
                 <div class="video-container">
-                    <!-- Remove scaleX(-1) transform to fix mirror issue -->
+                    <!-- Added scaleX(-1) for mirror view -->
                     <video id="webcam" autoplay playsinline muted></video>
                     <canvas id="overlayCanvas"></canvas>
 
                     <div class="overlay-display">
-                        <div class="angle-display-group">
-                            <div class="angle-display-left">
-                                <span class="angle-label">Left Arm</span>
-                                <span id="leftAngleDisplay" class="angle-value">--°</span>
-                            </div>
-                            <div class="angle-display-right">
-                                <span class="angle-label">Right Arm</span>
-                                <span id="rightAngleDisplay" class="angle-value">--°</span>
+                        <!-- Combined reps counter -->
+                        <div class="reps-counter-container">
+                            <div class="reps-counter">
+                                <span class="reps-label">Total Reps</span>
+                                <span id="totalRepsDisplay" class="reps-value">0</span>
                             </div>
                         </div>
+
                         <div class="detection-info">
-                            <span id="landmarkCount" class="landmark-count">Points: 0/33</span>
                             <span id="poseStatus" class="pose-status">Initializing...</span>
                         </div>
                     </div>
@@ -43,7 +59,7 @@
 
                 <div class="controls-panel">
                     <div class="counter-display">
-                        <div class="counter-title">Bicep Curls</div>
+                        <div class="counter-title">Arm Counters</div>
                         <div class="counter-group">
                             <div class="counter-item">
                                 <span class="counter-label">Left:</span>
@@ -52,6 +68,10 @@
                             <div class="counter-item">
                                 <span class="counter-label">Right:</span>
                                 <span id="rightCounter" class="counter-value">0</span>
+                            </div>
+                            <div class="counter-item">
+                                <span class="counter-label">Total:</span>
+                                <span id="totalCounter" class="counter-value">0</span>
                             </div>
                         </div>
                     </div>
@@ -188,16 +208,16 @@
                         </div>
                     </div>
                     <div class="legend-note">
-                        <p>💡 <strong>Note:</strong> Left/right are now correctly mapped to your actual body sides</p>
-                        <p>Both elbow angles are calculated and displayed in real-time</p>
+                        <p>💡 <strong>Note:</strong> Reps counter increases for both arms or single arm movement</p>
+                        <p>Camera view is mirrored for natural movement perception</p>
                     </div>
                 </div>
             </div>
         </div>
 
         <footer>
-            <p>Dual Arm Angle Tracking | Correct Left/Right Mapping | Real-time Pose Estimation</p>
-            <p class="footer-note">Shows angles for both elbows with individual curl counting</p>
+            <p>Dual Arm Angle Tracking | Combined Rep Counting | Mirror View Enabled</p>
+            <p class="footer-note">Counts reps for both arms together or individually</p>
         </footer>
     </div>
 

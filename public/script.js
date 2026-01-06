@@ -1,11 +1,13 @@
-// script.js - Fixed mirror issue with dual arm angle tracking
+// script.js - Updated for combined reps counting and mirror view
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
 const overlayCanvas = document.getElementById('overlayCanvas');
 const canvasCtx = overlayCanvas.getContext('2d');
-const leftAngleDisplay = document.getElementById('leftAngleDisplay');
-const rightAngleDisplay = document.getElementById('rightAngleDisplay');
+const leftAngleTitle = document.getElementById('leftAngleTitle');
+const rightAngleTitle = document.getElementById('rightAngleTitle');
+const landmarkTitle = document.getElementById('landmarkTitle');
+const totalRepsDisplay = document.getElementById('totalRepsDisplay');
 const leftAngleValue = document.getElementById('leftAngleValue');
 const rightAngleValue = document.getElementById('rightAngleValue');
 const leftAngleFill = document.getElementById('leftAngleFill');
@@ -18,7 +20,7 @@ const leftStageIndicator = document.getElementById('leftStageIndicator');
 const rightStageIndicator = document.getElementById('rightStageIndicator');
 const leftCounter = document.getElementById('leftCounter');
 const rightCounter = document.getElementById('rightCounter');
-const landmarkCount = document.getElementById('landmarkCount');
+const totalCounter = document.getElementById('totalCounter');
 const detectedPoints = document.getElementById('detectedPoints');
 const landmarksProgress = document.getElementById('landmarksProgress');
 const poseStatus = document.getElementById('poseStatus');
@@ -34,6 +36,7 @@ const apiToggleBtn = document.getElementById('apiToggle');
 // State variables
 let leftArmCounter = 0;
 let rightArmCounter = 0;
+let totalRepsCounter = 0;
 let leftStageState = null;
 let rightStageState = null;
 let leftArmAngle = 0;
@@ -46,6 +49,7 @@ let frameCount = 0;
 let fps = 0;
 let landmarks = null;
 let detectionConfidence = 0;
+let repInProgress = false;
 
 // Colors for correct left/right mapping (screen perspective)
 const COLORS = {
@@ -478,6 +482,9 @@ function calculateArmAngles(landmarks) {
 
     // Update arm visibility status
     updateArmVisibility(leftShoulder && rightShoulder);
+    
+    // Update title angles
+    updateTitleAngles();
 }
 
 function calculateAngle(a, b, c) {
@@ -503,9 +510,18 @@ function countLeftCurl(angle) {
         leftStageState = "up";
         leftArmCounter++;
         updateLeftCounter();
+        updateTotalReps();
         updateLeftStage("UP", "#EF476F");
         updateLeftStageProgress(0);
         animateLeftRep();
+        
+        // Count rep if either arm completes curl
+        if (!repInProgress) {
+            repInProgress = true;
+            totalRepsCounter++;
+            updateTotalRepsDisplay();
+            animateTotalRep();
+        }
     }
 }
 
@@ -520,17 +536,35 @@ function countRightCurl(angle) {
         rightStageState = "up";
         rightArmCounter++;
         updateRightCounter();
+        updateTotalReps();
         updateRightStage("UP", "#EF476F");
         updateRightStageProgress(0);
         animateRightRep();
+        
+        // Count rep if either arm completes curl
+        if (!repInProgress) {
+            repInProgress = true;
+            totalRepsCounter++;
+            updateTotalRepsDisplay();
+            animateTotalRep();
+        }
+    }
+    
+    // Reset repInProgress when both arms are extended
+    if (angle > 160 && leftArmAngle > 160) {
+        repInProgress = false;
     }
 }
 
 // ==================== UI UPDATES ====================
 
+function updateTitleAngles() {
+    leftAngleTitle.textContent = `${Math.round(leftArmAngle)}°`;
+    rightAngleTitle.textContent = `${Math.round(rightArmAngle)}°`;
+}
+
 function updateLeftArmUI(angle, visible = true) {
     const roundedAngle = Math.round(angle);
-    leftAngleDisplay.textContent = `${roundedAngle}°`;
     leftAngleValue.textContent = `${roundedAngle}°`;
 
     if (visible) {
@@ -542,7 +576,6 @@ function updateLeftArmUI(angle, visible = true) {
 
 function updateRightArmUI(angle, visible = true) {
     const roundedAngle = Math.round(angle);
-    rightAngleDisplay.textContent = `${roundedAngle}°`;
     rightAngleValue.textContent = `${roundedAngle}°`;
 
     if (visible) {
@@ -584,6 +617,16 @@ function updateRightCounter() {
     setTimeout(() => rightCounter.classList.remove('rep-animation'), 500);
 }
 
+function updateTotalReps() {
+    totalCounter.textContent = leftArmCounter + rightArmCounter;
+}
+
+function updateTotalRepsDisplay() {
+    totalRepsDisplay.textContent = totalRepsCounter;
+    totalRepsDisplay.classList.add('rep-animation');
+    setTimeout(() => totalRepsDisplay.classList.remove('rep-animation'), 500);
+}
+
 function animateLeftRep() {
     document.querySelector('.left-angle').classList.add('highlight-active');
     setTimeout(() => {
@@ -598,9 +641,16 @@ function animateRightRep() {
     }, 1000);
 }
 
+function animateTotalRep() {
+    totalRepsDisplay.classList.add('highlight-total');
+    setTimeout(() => {
+        totalRepsDisplay.classList.remove('highlight-total');
+    }, 1000);
+}
+
 function updateLandmarkStats(count) {
     detectedPoints.textContent = count;
-    landmarkCount.textContent = `Points: ${count}/33`;
+    landmarkTitle.textContent = `Points: ${count}/33`;
 
     const percent = (count / 33) * 100;
     landmarksProgress.style.width = `${percent}%`;
@@ -646,23 +696,27 @@ function toggleProcessingMode() {
 function resetAll() {
     leftArmCounter = 0;
     rightArmCounter = 0;
+    totalRepsCounter = 0;
     leftStageState = null;
     rightStageState = null;
+    repInProgress = false;
 
     updateLeftCounter();
     updateRightCounter();
+    updateTotalReps();
+    updateTotalRepsDisplay();
     updateLeftStage('--', '#a0a0c0');
     updateRightStage('--', '#a0a0c0');
     updateLeftStageProgress(0);
     updateRightStageProgress(0);
     clearCanvas();
+    
+    updateTitleAngles();
 
     // Visual feedback
-    leftCounter.style.color = '#FF6B6B';
-    rightCounter.style.color = '#FF6B6B';
+    totalRepsDisplay.style.color = '#EF476F';
     setTimeout(() => {
-        leftCounter.style.color = '#FF6B6B';
-        rightCounter.style.color = '#4CC9F0';
+        totalRepsDisplay.style.color = '#FFFFFF';
     }, 300);
 }
 
@@ -732,15 +786,22 @@ function startFPSCounter() {
 apiToggleBtn.addEventListener('click', toggleProcessingMode);
 resetBtn.addEventListener('click', resetAll);
 
-// Counter tap to reset
+// Counter tap to reset individual counters
 leftCounter.addEventListener('click', () => {
     leftArmCounter = 0;
     updateLeftCounter();
+    updateTotalReps();
 });
 
 rightCounter.addEventListener('click', () => {
     rightArmCounter = 0;
     updateRightCounter();
+    updateTotalReps();
+});
+
+totalRepsDisplay.addEventListener('click', () => {
+    totalRepsCounter = 0;
+    updateTotalRepsDisplay();
 });
 
 // ==================== INITIALIZATION ====================
@@ -751,7 +812,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await startCamera();
     updateProcessingMode();
 
-    console.log('System ready - Left/Right correctly mapped');
+    console.log('System ready - Combined reps counting');
 });
 
 // Cleanup
