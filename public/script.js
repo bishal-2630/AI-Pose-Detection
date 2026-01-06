@@ -1,11 +1,9 @@
-// script.js - Mirror view with correct left/right mapping
+// script.js - Mirror view with correct rep counting
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
 const overlayCanvas = document.getElementById('overlayCanvas');
 const canvasCtx = overlayCanvas.getContext('2d');
-const leftAngleDisplay = document.getElementById('leftAngleDisplay');
-const rightAngleDisplay = document.getElementById('rightAngleDisplay');
 const leftAngleValue = document.getElementById('leftAngleValue');
 const rightAngleValue = document.getElementById('rightAngleValue');
 const leftAngleFill = document.getElementById('leftAngleFill');
@@ -16,11 +14,11 @@ const leftStageText = document.getElementById('leftStageText');
 const rightStageText = document.getElementById('rightStageText');
 const leftStageIndicator = document.getElementById('leftStageIndicator');
 const rightStageIndicator = document.getElementById('rightStageIndicator');
-const totalRepsElement = document.getElementById('totalReps');
+const repsCounterElement = document.getElementById('repsCounter');
 const totalCounterElement = document.getElementById('totalCounter');
 const mobileLeftAngle = document.getElementById('mobileLeftAngle');
 const mobileRightAngle = document.getElementById('mobileRightAngle');
-const landmarkCount = document.getElementById('landmarkCount');
+const mobilePoints = document.getElementById('mobilePoints');
 const detectedPoints = document.getElementById('detectedPoints');
 const landmarksProgress = document.getElementById('landmarksProgress');
 const poseStatus = document.getElementById('poseStatus');
@@ -34,8 +32,6 @@ const resetBtn = document.getElementById('resetBtn');
 const apiToggleBtn = document.getElementById('apiToggle');
 
 // State variables
-let leftArmCounter = 0;
-let rightArmCounter = 0;
 let totalReps = 0;
 let leftStageState = null;
 let rightStageState = null;
@@ -56,68 +52,24 @@ const COLORS = {
     rightSide: '#4CC9F0',     // Blue for right side (screen right in mirror)
     center: '#FFD166',        // Yellow for center points
     connections: '#118AB2',   // Blue for skeleton lines
-    angleArc: '#06D6A0',      // Green for angle arcs
-    activeArm: '#EF476F'      // Pink for active arm highlights
+    angleArc: '#06D6A0'       // Green for angle arcs
 };
 
 // MediaPipe landmark indices (person's perspective)
 const LANDMARK_INDICES = {
-    // Face landmarks
     NOSE: 0,
-    LEFT_EYE_INNER: 1,
-    LEFT_EYE: 2,
-    LEFT_EYE_OUTER: 3,
-    RIGHT_EYE_INNER: 4,
-    RIGHT_EYE: 5,
-    RIGHT_EYE_OUTER: 6,
-    LEFT_EAR: 7,
-    RIGHT_EAR: 8,
-    MOUTH_LEFT: 9,
-    MOUTH_RIGHT: 10,
-    
-    // Body landmarks (person's perspective)
     LEFT_SHOULDER: 11,
     RIGHT_SHOULDER: 12,
     LEFT_ELBOW: 13,
     RIGHT_ELBOW: 14,
     LEFT_WRIST: 15,
     RIGHT_WRIST: 16,
-    
-    // Hands
-    LEFT_PINKY: 17,
-    RIGHT_PINKY: 18,
-    LEFT_INDEX: 19,
-    RIGHT_INDEX: 20,
-    LEFT_THUMB: 21,
-    RIGHT_THUMB: 22,
-    
-    // Lower body
     LEFT_HIP: 23,
-    RIGHT_HIP: 24,
-    LEFT_KNEE: 25,
-    RIGHT_KNEE: 26,
-    LEFT_ANKLE: 27,
-    RIGHT_ANKLE: 28,
-    LEFT_HEEL: 29,
-    RIGHT_HEEL: 30,
-    LEFT_FOOT_INDEX: 31,
-    RIGHT_FOOT_INDEX: 32
+    RIGHT_HIP: 24
 };
 
 // Skeleton connections (person's perspective)
 const SKELETON_CONNECTIONS = [
-    // Face connections
-    [LANDMARK_INDICES.NOSE, LANDMARK_INDICES.LEFT_EYE_INNER],
-    [LANDMARK_INDICES.LEFT_EYE_INNER, LANDMARK_INDICES.LEFT_EYE],
-    [LANDMARK_INDICES.LEFT_EYE, LANDMARK_INDICES.LEFT_EYE_OUTER],
-    [LANDMARK_INDICES.LEFT_EYE_OUTER, LANDMARK_INDICES.LEFT_EAR],
-    [LANDMARK_INDICES.NOSE, LANDMARK_INDICES.RIGHT_EYE_INNER],
-    [LANDMARK_INDICES.RIGHT_EYE_INNER, LANDMARK_INDICES.RIGHT_EYE],
-    [LANDMARK_INDICES.RIGHT_EYE, LANDMARK_INDICES.RIGHT_EYE_OUTER],
-    [LANDMARK_INDICES.RIGHT_EYE_OUTER, LANDMARK_INDICES.RIGHT_EAR],
-    [LANDMARK_INDICES.MOUTH_LEFT, LANDMARK_INDICES.MOUTH_RIGHT],
-    
-    // Upper body
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.RIGHT_SHOULDER],
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_ELBOW],
     [LANDMARK_INDICES.LEFT_ELBOW, LANDMARK_INDICES.LEFT_WRIST],
@@ -125,23 +77,7 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.RIGHT_ELBOW, LANDMARK_INDICES.RIGHT_WRIST],
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_HIP],
     [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_HIP],
-    
-    // Hand connections
-    [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_THUMB],
-    [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_INDEX],
-    [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_PINKY],
-    [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_THUMB],
-    [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_INDEX],
-    [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_PINKY],
-    
-    // Lower body
-    [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.RIGHT_HIP],
-    [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.LEFT_KNEE],
-    [LANDMARK_INDICES.LEFT_KNEE, LANDMARK_INDICES.LEFT_ANKLE],
-    [LANDMARK_INDICES.RIGHT_HIP, LANDMARK_INDICES.RIGHT_KNEE],
-    [LANDMARK_INDICES.RIGHT_KNEE, LANDMARK_INDICES.RIGHT_ANKLE],
-    [LANDMARK_INDICES.LEFT_ANKLE, LANDMARK_INDICES.LEFT_HEEL],
-    [LANDMARK_INDICES.RIGHT_ANKLE, LANDMARK_INDICES.RIGHT_HEEL]
+    [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.RIGHT_HIP]
 ];
 
 // ==================== MEDIAPIPE INITIALIZATION ====================
@@ -242,11 +178,11 @@ function drawSkeleton(results) {
     // Clear canvas
     canvasCtx.clearRect(0, 0, videoWidth, videoHeight);
     
-    // Draw all connections
+    // Draw skeleton connections
     drawConnections(results.poseLandmarks, videoWidth, videoHeight);
     
-    // Draw all landmarks
-    drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
+    // Draw key landmarks
+    drawKeyLandmarks(results.poseLandmarks, videoWidth, videoHeight);
     
     // Draw arm angles
     drawArmAngles(results.poseLandmarks, videoWidth, videoHeight);
@@ -302,55 +238,46 @@ function drawLine(start, end, width, height, color) {
     canvasCtx.stroke();
 }
 
-function drawLandmarks(landmarks, width, height) {
-    landmarks.forEach((landmark, index) => {
+function drawKeyLandmarks(landmarks, width, height) {
+    // Only draw key landmarks for arms and shoulders
+    const keyLandmarks = [
+        LANDMARK_INDICES.LEFT_SHOULDER,
+        LANDMARK_INDICES.RIGHT_SHOULDER,
+        LANDMARK_INDICES.LEFT_ELBOW,
+        LANDMARK_INDICES.RIGHT_ELBOW,
+        LANDMARK_INDICES.LEFT_WRIST,
+        LANDMARK_INDICES.RIGHT_WRIST
+    ];
+    
+    keyLandmarks.forEach(index => {
+        const landmark = landmarks[index];
         if (landmark && landmark.visibility > 0.1) {
             // Mirror view: flip X coordinate
             const mirroredX = width - (landmark.x * width);
             const y = landmark.y * height;
             
             // Determine color based on side (mirror view)
-            let color, size;
+            let color, size = 8;
             
-            if (index <= 10) {
-                // Face landmarks - swap for mirror view
-                color = index <= 3 || index === 7 || index === 9 ? 
-                       COLORS.rightSide : COLORS.leftSide;
-                size = 5;
-            } else if (index <= 22) {
-                // Upper body - person's right = screen left (red)
-                if (index === LANDMARK_INDICES.RIGHT_SHOULDER || 
-                    index === LANDMARK_INDICES.RIGHT_ELBOW || 
-                    index === LANDMARK_INDICES.RIGHT_WRIST) {
-                    color = COLORS.leftSide; // Screen left = red
-                    size = 8;
-                } else if (index === LANDMARK_INDICES.LEFT_SHOULDER || 
-                          index === LANDMARK_INDICES.LEFT_ELBOW || 
-                          index === LANDMARK_INDICES.LEFT_WRIST) {
-                    color = COLORS.rightSide; // Screen right = blue
-                    size = 8;
-                } else {
-                    color = COLORS.center;
-                    size = 6;
-                }
-            } else {
-                // Lower body
-                color = index === 23 || index === 25 || index === 27 || index === 29 || index === 31 ?
-                       COLORS.rightSide : COLORS.leftSide;
-                size = 7;
+            // Person's right = screen left (red)
+            if (index === LANDMARK_INDICES.RIGHT_SHOULDER || 
+                index === LANDMARK_INDICES.RIGHT_ELBOW || 
+                index === LANDMARK_INDICES.RIGHT_WRIST) {
+                color = COLORS.leftSide;
+            }
+            // Person's left = screen right (blue)
+            else if (index === LANDMARK_INDICES.LEFT_SHOULDER || 
+                     index === LANDMARK_INDICES.LEFT_ELBOW || 
+                     index === LANDMARK_INDICES.LEFT_WRIST) {
+                color = COLORS.rightSide;
             }
             
-            if (index === 0) { // Nose
-                color = COLORS.center;
-                size = 9;
-            }
-            
-            drawPoint(mirroredX, y, color, size, index);
+            drawPoint(mirroredX, y, color, size);
         }
     });
 }
 
-function drawPoint(x, y, color, size, index) {
+function drawPoint(x, y, color, size) {
     // Outer circle
     canvasCtx.beginPath();
     canvasCtx.arc(x, y, size * 1.5, 0, 2 * Math.PI);
@@ -368,15 +295,6 @@ function drawPoint(x, y, color, size, index) {
     canvasCtx.arc(x, y, size * 0.4, 0, 2 * Math.PI);
     canvasCtx.fillStyle = '#FFFFFF';
     canvasCtx.fill();
-    
-    // Draw index for key points
-    if ([0, 11, 12, 13, 14, 15, 16, 23, 24].includes(index)) {
-        canvasCtx.fillStyle = '#FFFFFF';
-        canvasCtx.font = 'bold 10px Arial';
-        canvasCtx.textAlign = 'center';
-        canvasCtx.textBaseline = 'middle';
-        canvasCtx.fillText(index, x, y);
-    }
 }
 
 function drawArmAngles(landmarks, width, height) {
@@ -389,7 +307,7 @@ function drawArmAngles(landmarks, width, height) {
         leftShoulder.visibility > 0.3 && 
         leftElbow.visibility > 0.3 && 
         leftWrist.visibility > 0.3) {
-        drawAngleArc(leftShoulder, leftElbow, leftWrist, width, height, COLORS.leftSide, "LEFT");
+        drawAngleArc(leftShoulder, leftElbow, leftWrist, width, height, COLORS.leftSide);
     }
     
     // Draw right arm angle (screen right = person's left)
@@ -401,18 +319,18 @@ function drawArmAngles(landmarks, width, height) {
         rightShoulder.visibility > 0.3 && 
         rightElbow.visibility > 0.3 && 
         rightWrist.visibility > 0.3) {
-        drawAngleArc(rightShoulder, rightElbow, rightWrist, width, height, COLORS.rightSide, "RIGHT");
+        drawAngleArc(rightShoulder, rightElbow, rightWrist, width, height, COLORS.rightSide);
     }
 }
 
-function drawAngleArc(shoulder, elbow, wrist, width, height, color, side) {
+function drawAngleArc(shoulder, elbow, wrist, width, height, color) {
     // Mirror view: flip X coordinate
     const elbowX = width - (elbow.x * width);
     const elbowY = elbow.y * height;
     
     // Calculate angle
     const angle = calculateAngle(shoulder, elbow, wrist);
-    const radius = 35;
+    const radius = 30;
     
     // Calculate arc angles (adjusted for mirror view)
     const startAngle = Math.atan2(
@@ -431,17 +349,6 @@ function drawAngleArc(shoulder, elbow, wrist, width, height, color, side) {
     canvasCtx.lineWidth = 4;
     canvasCtx.lineCap = 'round';
     canvasCtx.stroke();
-    
-    // Draw angle text
-    canvasCtx.fillStyle = '#FFFFFF';
-    canvasCtx.font = 'bold 14px Arial';
-    canvasCtx.textAlign = 'center';
-    canvasCtx.fillText(`${Math.round(angle)}°`, elbowX, elbowY - radius - 10);
-    
-    // Draw side label
-    canvasCtx.fillStyle = color;
-    canvasCtx.font = 'bold 12px Arial';
-    canvasCtx.fillText(side, elbowX, elbowY + radius + 15);
 }
 
 function clearCanvas() {
@@ -468,7 +375,7 @@ function calculateArmAngles(landmarks) {
         leftWrist.visibility > 0.3) {
         leftArmAngle = calculateAngle(leftShoulder, leftElbow, leftWrist);
         updateLeftArmUI(leftArmAngle);
-        countLeftCurl(leftArmAngle);
+        countCurl(leftArmAngle, 'left');
     } else {
         leftArmAngle = 0;
         updateLeftArmUI(0, false);
@@ -481,7 +388,7 @@ function calculateArmAngles(landmarks) {
         rightWrist.visibility > 0.3) {
         rightArmAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
         updateRightArmUI(rightArmAngle);
-        countRightCurl(rightArmAngle);
+        countCurl(rightArmAngle, 'right');
     } else {
         rightArmAngle = 0;
         updateRightArmUI(0, false);
@@ -503,47 +410,57 @@ function calculateAngle(a, b, c) {
     return angle;
 }
 
-function countLeftCurl(angle) {
+// Track curl states for each arm
+let leftArmState = { stage: null, hasCounted: false };
+let rightArmState = { stage: null, hasCounted: false };
+
+function countCurl(angle, arm) {
+    let state = arm === 'left' ? leftArmState : rightArmState;
+    let color = arm === 'left' ? '#FF6B6B' : '#4CC9F0';
+    let stageElement = arm === 'left' ? leftStage : rightStage;
+    let stageText = arm === 'left' ? leftStageText : rightStageText;
+    let indicator = arm === 'left' ? leftStageIndicator : rightStageIndicator;
+    
+    // Reset hasCounted when arm goes down
     if (angle > 160) {
-        leftStageState = "down";
-        updateLeftStage("DOWN", "#FF6B6B");
-        updateLeftStageProgress(1);
+        state.stage = "down";
+        state.hasCounted = false;
+        updateStageUI(stageElement, stageText, "DOWN", color);
+        updateStageProgress(indicator, 1);
     }
     
-    if (angle < 40 && leftStageState === "down") {
-        leftStageState = "up";
-        leftArmCounter++;
+    // Count rep when arm goes up and hasn't been counted yet in this cycle
+    if (angle < 40 && state.stage === "down" && !state.hasCounted) {
+        state.stage = "up";
+        state.hasCounted = true;
         totalReps++;
         updateCounters();
-        updateLeftStage("UP", "#EF476F");
-        updateLeftStageProgress(0);
-        animateLeftRep();
+        updateStageUI(stageElement, stageText, "UP", '#EF476F');
+        updateStageProgress(indicator, 0);
+        
+        // Animate the gauge
+        if (arm === 'left') {
+            animateLeftRep();
+        } else {
+            animateRightRep();
+        }
     }
 }
 
-function countRightCurl(angle) {
-    if (angle > 160) {
-        rightStageState = "down";
-        updateRightStage("DOWN", "#4CC9F0");
-        updateRightStageProgress(1);
-    }
-    
-    if (angle < 40 && rightStageState === "down") {
-        rightStageState = "up";
-        rightArmCounter++;
-        totalReps++;
-        updateCounters();
-        updateRightStage("UP", "#EF476F");
-        updateRightStageProgress(0);
-        animateRightRep();
-    }
+function updateStageUI(stageElement, stageText, text, color) {
+    stageElement.textContent = text;
+    stageText.textContent = text;
+    stageText.style.color = color;
+}
+
+function updateStageProgress(indicator, progress) {
+    indicator.style.width = `${progress * 100}%`;
 }
 
 // ==================== UI UPDATES ====================
 
 function updateLeftArmUI(angle, visible = true) {
     const roundedAngle = Math.round(angle);
-    leftAngleDisplay.textContent = `${roundedAngle}°`;
     leftAngleValue.textContent = `${roundedAngle}°`;
     mobileLeftAngle.textContent = `${roundedAngle}°`;
     
@@ -556,7 +473,6 @@ function updateLeftArmUI(angle, visible = true) {
 
 function updateRightArmUI(angle, visible = true) {
     const roundedAngle = Math.round(angle);
-    rightAngleDisplay.textContent = `${roundedAngle}°`;
     rightAngleValue.textContent = `${roundedAngle}°`;
     mobileRightAngle.textContent = `${roundedAngle}°`;
     
@@ -567,33 +483,17 @@ function updateRightArmUI(angle, visible = true) {
     }
 }
 
-function updateLeftStage(text, color) {
-    leftStage.textContent = text;
-    leftStageText.textContent = text;
-    leftStageText.style.color = color;
-}
-
-function updateRightStage(text, color) {
-    rightStage.textContent = text;
-    rightStageText.textContent = text;
-    rightStageText.style.color = color;
-}
-
-function updateLeftStageProgress(progress) {
-    leftStageIndicator.style.width = `${progress * 100}%`;
-}
-
-function updateRightStageProgress(progress) {
-    rightStageIndicator.style.width = `${progress * 100}%`;
-}
-
 function updateCounters() {
-    totalRepsElement.textContent = totalReps;
+    repsCounterElement.textContent = totalReps;
     totalCounterElement.textContent = totalReps;
     
     // Add animation
+    repsCounterElement.classList.add('rep-animation');
     totalCounterElement.classList.add('rep-animation');
-    setTimeout(() => totalCounterElement.classList.remove('rep-animation'), 500);
+    setTimeout(() => {
+        repsCounterElement.classList.remove('rep-animation');
+        totalCounterElement.classList.remove('rep-animation');
+    }, 500);
 }
 
 function animateLeftRep() {
@@ -612,7 +512,7 @@ function animateRightRep() {
 
 function updateLandmarkStats(count) {
     detectedPoints.textContent = count;
-    landmarkCount.textContent = `Points: ${count}/33`;
+    mobilePoints.textContent = `${count}/33`;
     
     const percent = (count / 33) * 100;
     landmarksProgress.style.width = `${percent}%`;
@@ -656,22 +556,24 @@ function toggleProcessingMode() {
 }
 
 function resetAll() {
-    leftArmCounter = 0;
-    rightArmCounter = 0;
     totalReps = 0;
+    leftArmState = { stage: null, hasCounted: false };
+    rightArmState = { stage: null, hasCounted: false };
     leftStageState = null;
     rightStageState = null;
     
     updateCounters();
-    updateLeftStage('--', '#a0a0c0');
-    updateRightStage('--', '#a0a0c0');
-    updateLeftStageProgress(0);
-    updateRightStageProgress(0);
+    updateStageUI(leftStage, leftStageText, '--', '#a0a0c0');
+    updateStageUI(rightStage, rightStageText, '--', '#a0a0c0');
+    updateStageProgress(leftStageIndicator, 0);
+    updateStageProgress(rightStageIndicator, 0);
     clearCanvas();
     
     // Visual feedback
+    repsCounterElement.style.color = '#FF6B6B';
     totalCounterElement.style.color = '#FF6B6B';
     setTimeout(() => {
+        repsCounterElement.style.color = '#FFFFFF';
         totalCounterElement.style.color = '#00dbde';
     }, 300);
 }
@@ -745,14 +647,13 @@ function startFPSCounter() {
 apiToggleBtn.addEventListener('click', toggleProcessingMode);
 resetBtn.addEventListener('click', resetAll);
 
-// Total counter tap to reset
-totalCounterElement.addEventListener('click', () => {
+// Counters tap to reset
+repsCounterElement.addEventListener('click', () => {
     totalReps = 0;
     updateCounters();
 });
 
-// Mobile summary tap to reset
-totalRepsElement.addEventListener('click', () => {
+totalCounterElement.addEventListener('click', () => {
     totalReps = 0;
     updateCounters();
 });
@@ -760,12 +661,12 @@ totalRepsElement.addEventListener('click', () => {
 // ==================== INITIALIZATION ====================
 
 window.addEventListener('DOMContentLoaded', async () => {
-    console.log('Starting Dual Arm Angle Tracking with Mirror View...');
+    console.log('Starting Pose Detection - Single Hand Rep Counting...');
     
     await startCamera();
     updateProcessingMode();
     
-    console.log('System ready - Mirror view active');
+    console.log('System ready - Each arm curl counts as 1 rep');
 });
 
 // Cleanup

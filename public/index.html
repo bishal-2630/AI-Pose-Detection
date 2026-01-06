@@ -17,16 +17,16 @@
             <!-- Mobile-friendly summary display -->
             <div class="mobile-summary">
                 <div class="summary-item">
-                    <span class="summary-label">Total Reps:</span>
-                    <span id="totalReps" class="summary-value">0</span>
-                </div>
-                <div class="summary-item">
                     <span class="summary-label">Left Angle:</span>
                     <span id="mobileLeftAngle" class="summary-value angle-left">--°</span>
                 </div>
                 <div class="summary-item">
                     <span class="summary-label">Right Angle:</span>
                     <span id="mobileRightAngle" class="summary-value angle-right">--°</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Points:</span>
+                    <span id="mobilePoints" class="summary-value points-count">0/33</span>
                 </div>
             </div>
         </header>
@@ -35,24 +35,15 @@
             <!-- Video Feed -->
             <div class="video-section">
                 <div class="video-container">
-                    <!-- Restore mirror view -->
+                    <!-- Mirror view -->
                     <video id="webcam" autoplay playsinline muted style="transform: scaleX(-1);"></video>
                     <canvas id="overlayCanvas"></canvas>
 
-                    <div class="overlay-display">
-                        <div class="angle-display-group">
-                            <div class="angle-display-left">
-                                <span class="angle-label">Left Arm Angle</span>
-                                <span id="leftAngleDisplay" class="angle-value">--°</span>
-                            </div>
-                            <div class="angle-display-right">
-                                <span class="angle-label">Right Arm Angle</span>
-                                <span id="rightAngleDisplay" class="angle-value">--°</span>
-                            </div>
-                        </div>
-                        <div class="detection-info">
-                            <span id="landmarkCount" class="landmark-count">Points: 0/33</span>
-                            <span id="poseStatus" class="pose-status">Initializing...</span>
+                    <!-- Simplified overlay - Only reps counter -->
+                    <div class="reps-overlay">
+                        <div class="reps-display">
+                            <div class="reps-label">TOTAL REPS</div>
+                            <div id="repsCounter" class="reps-value">0</div>
                         </div>
                     </div>
                 </div>
@@ -61,7 +52,6 @@
                     <div class="counter-display">
                         <div class="counter-title">Bicep Curl Reps</div>
                         <div class="counter-group">
-                            <!-- Updated: No left/right labels, just total -->
                             <div class="counter-item total-reps">
                                 <span class="counter-label">Total Reps:</span>
                                 <span id="totalCounter" class="counter-value">0</span>
@@ -197,17 +187,16 @@
                         </div>
                     </div>
                     <div class="legend-note">
-                        <p>💡 <strong>Mirror View:</strong> Display is mirrored - left/right match what you see in the
-                            camera</p>
-                        <p>Both elbow angles are calculated and displayed in real-time</p>
+                        <p>💡 <strong>Rep Counting:</strong> Each arm curl counts as 1 rep</p>
+                        <p>Mirror view - Left/right match what you see in camera</p>
                     </div>
                 </div>
             </div>
         </div>
 
         <footer>
-            <p>Dual Arm Angle Tracking | Mirror View | Real-time Pose Estimation</p>
-            <p class="footer-note">Shows angles for both elbows with total curl counting</p>
+            <p>Dual Arm Angle Tracking | Single Hand Rep Counting | Mirror View</p>
+            <p class="footer-note">Each arm movement counts as 1 rep - Total reps displayed on screen</p>
         </footer>
     </div>
 
