@@ -1,4 +1,4 @@
-// script.js - Fixed mirror issue with dual arm angle tracking
+// script.js - Mirror view with correct left/right mapping
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
@@ -16,8 +16,10 @@ const leftStageText = document.getElementById('leftStageText');
 const rightStageText = document.getElementById('rightStageText');
 const leftStageIndicator = document.getElementById('leftStageIndicator');
 const rightStageIndicator = document.getElementById('rightStageIndicator');
-const leftCounter = document.getElementById('leftCounter');
-const rightCounter = document.getElementById('rightCounter');
+const totalRepsElement = document.getElementById('totalReps');
+const totalCounterElement = document.getElementById('totalCounter');
+const mobileLeftAngle = document.getElementById('mobileLeftAngle');
+const mobileRightAngle = document.getElementById('mobileRightAngle');
 const landmarkCount = document.getElementById('landmarkCount');
 const detectedPoints = document.getElementById('detectedPoints');
 const landmarksProgress = document.getElementById('landmarksProgress');
@@ -34,6 +36,7 @@ const apiToggleBtn = document.getElementById('apiToggle');
 // State variables
 let leftArmCounter = 0;
 let rightArmCounter = 0;
+let totalReps = 0;
 let leftStageState = null;
 let rightStageState = null;
 let leftArmAngle = 0;
@@ -47,39 +50,38 @@ let fps = 0;
 let landmarks = null;
 let detectionConfidence = 0;
 
-// Colors for correct left/right mapping (screen perspective)
+// Colors for mirror view (screen perspective)
 const COLORS = {
-    leftSide: '#FF6B6B',      // Red for left side (screen left)
-    rightSide: '#4CC9F0',     // Blue for right side (screen right)
+    leftSide: '#FF6B6B',      // Red for left side (screen left in mirror)
+    rightSide: '#4CC9F0',     // Blue for right side (screen right in mirror)
     center: '#FFD166',        // Yellow for center points
     connections: '#118AB2',   // Blue for skeleton lines
     angleArc: '#06D6A0',      // Green for angle arcs
     activeArm: '#EF476F'      // Pink for active arm highlights
 };
 
-// MediaPipe landmark indices (using screen perspective)
+// MediaPipe landmark indices (person's perspective)
 const LANDMARK_INDICES = {
     // Face landmarks
     NOSE: 0,
-    LEFT_EYE_INNER: 1,    // Screen left
-    LEFT_EYE: 2,          // Screen left
-    LEFT_EYE_OUTER: 3,    // Screen left
-    RIGHT_EYE_INNER: 4,   // Screen right
-    RIGHT_EYE: 5,         // Screen right
-    RIGHT_EYE_OUTER: 6,   // Screen right
-    LEFT_EAR: 7,          // Screen left
-    RIGHT_EAR: 8,         // Screen right
-    MOUTH_LEFT: 9,        // Screen left
-    MOUTH_RIGHT: 10,      // Screen right
+    LEFT_EYE_INNER: 1,
+    LEFT_EYE: 2,
+    LEFT_EYE_OUTER: 3,
+    RIGHT_EYE_INNER: 4,
+    RIGHT_EYE: 5,
+    RIGHT_EYE_OUTER: 6,
+    LEFT_EAR: 7,
+    RIGHT_EAR: 8,
+    MOUTH_LEFT: 9,
+    MOUTH_RIGHT: 10,
     
-    // Body landmarks - IMPORTANT: These are from the person's perspective
-    // We need to swap them for screen perspective
-    LEFT_SHOULDER: 11,    // Person's left (Screen right)
-    RIGHT_SHOULDER: 12,   // Person's right (Screen left)
-    LEFT_ELBOW: 13,       // Person's left (Screen right)
-    RIGHT_ELBOW: 14,      // Person's right (Screen left)
-    LEFT_WRIST: 15,       // Person's left (Screen right)
-    RIGHT_WRIST: 16,      // Person's right (Screen left)
+    // Body landmarks (person's perspective)
+    LEFT_SHOULDER: 11,
+    RIGHT_SHOULDER: 12,
+    LEFT_ELBOW: 13,
+    RIGHT_ELBOW: 14,
+    LEFT_WRIST: 15,
+    RIGHT_WRIST: 16,
     
     // Hands
     LEFT_PINKY: 17,
@@ -102,7 +104,7 @@ const LANDMARK_INDICES = {
     RIGHT_FOOT_INDEX: 32
 };
 
-// Corrected connections for screen perspective
+// Skeleton connections (person's perspective)
 const SKELETON_CONNECTIONS = [
     // Face connections
     [LANDMARK_INDICES.NOSE, LANDMARK_INDICES.LEFT_EYE_INNER],
@@ -115,12 +117,12 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.RIGHT_EYE_OUTER, LANDMARK_INDICES.RIGHT_EAR],
     [LANDMARK_INDICES.MOUTH_LEFT, LANDMARK_INDICES.MOUTH_RIGHT],
     
-    // Upper body - IMPORTANT: Swapped for screen perspective
+    // Upper body
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.RIGHT_SHOULDER],
-    [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_ELBOW],    // Screen right arm
-    [LANDMARK_INDICES.LEFT_ELBOW, LANDMARK_INDICES.LEFT_WRIST],      // Screen right arm
-    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_ELBOW],  // Screen left arm
-    [LANDMARK_INDICES.RIGHT_ELBOW, LANDMARK_INDICES.RIGHT_WRIST],    // Screen left arm
+    [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_ELBOW],
+    [LANDMARK_INDICES.LEFT_ELBOW, LANDMARK_INDICES.LEFT_WRIST],
+    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_ELBOW],
+    [LANDMARK_INDICES.RIGHT_ELBOW, LANDMARK_INDICES.RIGHT_WRIST],
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_HIP],
     [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_HIP],
     
@@ -202,7 +204,7 @@ function onPoseResults(results) {
         const detectedCount = countDetectedLandmarks(landmarks);
         updateLandmarkStats(detectedCount);
         
-        // Draw skeleton with correct left/right mapping
+        // Draw skeleton with mirror view
         drawSkeleton(results);
         
         // Calculate and display both arm angles
@@ -259,10 +261,10 @@ function drawConnections(landmarks, width, height) {
         const end = landmarks[endIdx];
         
         if (start && end && start.visibility > 0.1 && end.visibility > 0.1) {
-            // Determine color based on side
+            // Determine color based on side (mirror view)
             let color = COLORS.connections;
             
-            // Screen left side (person's right)
+            // Mirror view: left side (screen left) = person's right
             if (startIdx === LANDMARK_INDICES.RIGHT_SHOULDER || 
                 startIdx === LANDMARK_INDICES.RIGHT_ELBOW || 
                 startIdx === LANDMARK_INDICES.RIGHT_WRIST ||
@@ -271,7 +273,7 @@ function drawConnections(landmarks, width, height) {
                 endIdx === LANDMARK_INDICES.RIGHT_WRIST) {
                 color = COLORS.leftSide; // Screen left = red
             }
-            // Screen right side (person's left)
+            // Mirror view: right side (screen right) = person's left
             else if (startIdx === LANDMARK_INDICES.LEFT_SHOULDER || 
                      startIdx === LANDMARK_INDICES.LEFT_ELBOW || 
                      startIdx === LANDMARK_INDICES.LEFT_WRIST ||
@@ -287,9 +289,10 @@ function drawConnections(landmarks, width, height) {
 }
 
 function drawLine(start, end, width, height, color) {
-    const startX = start.x * width;
+    // Mirror view: flip X coordinate
+    const startX = width - (start.x * width);
     const startY = start.y * height;
-    const endX = end.x * width;
+    const endX = width - (end.x * width);
     const endY = end.y * height;
     
     canvasCtx.beginPath();
@@ -302,16 +305,20 @@ function drawLine(start, end, width, height, color) {
 function drawLandmarks(landmarks, width, height) {
     landmarks.forEach((landmark, index) => {
         if (landmark && landmark.visibility > 0.1) {
-            // Determine color based on side and importance
+            // Mirror view: flip X coordinate
+            const mirroredX = width - (landmark.x * width);
+            const y = landmark.y * height;
+            
+            // Determine color based on side (mirror view)
             let color, size;
             
             if (index <= 10) {
-                // Face landmarks
+                // Face landmarks - swap for mirror view
                 color = index <= 3 || index === 7 || index === 9 ? 
-                       COLORS.leftSide : COLORS.rightSide;
+                       COLORS.rightSide : COLORS.leftSide;
                 size = 5;
             } else if (index <= 22) {
-                // Upper body
+                // Upper body - person's right = screen left (red)
                 if (index === LANDMARK_INDICES.RIGHT_SHOULDER || 
                     index === LANDMARK_INDICES.RIGHT_ELBOW || 
                     index === LANDMARK_INDICES.RIGHT_WRIST) {
@@ -338,15 +345,12 @@ function drawLandmarks(landmarks, width, height) {
                 size = 9;
             }
             
-            drawPoint(landmark, width, height, color, size, index);
+            drawPoint(mirroredX, y, color, size, index);
         }
     });
 }
 
-function drawPoint(landmark, width, height, color, size, index) {
-    const x = landmark.x * width;
-    const y = landmark.y * height;
-    
+function drawPoint(x, y, color, size, index) {
     // Outer circle
     canvasCtx.beginPath();
     canvasCtx.arc(x, y, size * 1.5, 0, 2 * Math.PI);
@@ -377,7 +381,7 @@ function drawPoint(landmark, width, height, color, size, index) {
 
 function drawArmAngles(landmarks, width, height) {
     // Draw left arm angle (screen left = person's right)
-    const leftShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER]; // Person's right = screen left
+    const leftShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const leftElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
     const leftWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
     
@@ -389,7 +393,7 @@ function drawArmAngles(landmarks, width, height) {
     }
     
     // Draw right arm angle (screen right = person's left)
-    const rightShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER]; // Person's left = screen right
+    const rightShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
     const rightElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
     const rightWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
     
@@ -402,16 +406,23 @@ function drawArmAngles(landmarks, width, height) {
 }
 
 function drawAngleArc(shoulder, elbow, wrist, width, height, color, side) {
-    const elbowX = elbow.x * width;
+    // Mirror view: flip X coordinate
+    const elbowX = width - (elbow.x * width);
     const elbowY = elbow.y * height;
     
     // Calculate angle
     const angle = calculateAngle(shoulder, elbow, wrist);
     const radius = 35;
     
-    // Calculate arc angles
-    const startAngle = Math.atan2(shoulder.y - elbow.y, shoulder.x - elbow.x);
-    const endAngle = Math.atan2(wrist.y - elbow.y, wrist.x - elbow.x);
+    // Calculate arc angles (adjusted for mirror view)
+    const startAngle = Math.atan2(
+        shoulder.y - elbow.y,
+        (width - shoulder.x * width) - elbowX
+    );
+    const endAngle = Math.atan2(
+        wrist.y - elbow.y,
+        (width - wrist.x * width) - elbowX
+    );
     
     // Draw arc
     canvasCtx.beginPath();
@@ -502,7 +513,8 @@ function countLeftCurl(angle) {
     if (angle < 40 && leftStageState === "down") {
         leftStageState = "up";
         leftArmCounter++;
-        updateLeftCounter();
+        totalReps++;
+        updateCounters();
         updateLeftStage("UP", "#EF476F");
         updateLeftStageProgress(0);
         animateLeftRep();
@@ -519,7 +531,8 @@ function countRightCurl(angle) {
     if (angle < 40 && rightStageState === "down") {
         rightStageState = "up";
         rightArmCounter++;
-        updateRightCounter();
+        totalReps++;
+        updateCounters();
         updateRightStage("UP", "#EF476F");
         updateRightStageProgress(0);
         animateRightRep();
@@ -532,6 +545,7 @@ function updateLeftArmUI(angle, visible = true) {
     const roundedAngle = Math.round(angle);
     leftAngleDisplay.textContent = `${roundedAngle}°`;
     leftAngleValue.textContent = `${roundedAngle}°`;
+    mobileLeftAngle.textContent = `${roundedAngle}°`;
     
     if (visible) {
         const circlePercent = (angle / 180) * 360;
@@ -544,6 +558,7 @@ function updateRightArmUI(angle, visible = true) {
     const roundedAngle = Math.round(angle);
     rightAngleDisplay.textContent = `${roundedAngle}°`;
     rightAngleValue.textContent = `${roundedAngle}°`;
+    mobileRightAngle.textContent = `${roundedAngle}°`;
     
     if (visible) {
         const circlePercent = (angle / 180) * 360;
@@ -572,16 +587,13 @@ function updateRightStageProgress(progress) {
     rightStageIndicator.style.width = `${progress * 100}%`;
 }
 
-function updateLeftCounter() {
-    leftCounter.textContent = leftArmCounter;
-    leftCounter.classList.add('rep-animation');
-    setTimeout(() => leftCounter.classList.remove('rep-animation'), 500);
-}
-
-function updateRightCounter() {
-    rightCounter.textContent = rightArmCounter;
-    rightCounter.classList.add('rep-animation');
-    setTimeout(() => rightCounter.classList.remove('rep-animation'), 500);
+function updateCounters() {
+    totalRepsElement.textContent = totalReps;
+    totalCounterElement.textContent = totalReps;
+    
+    // Add animation
+    totalCounterElement.classList.add('rep-animation');
+    setTimeout(() => totalCounterElement.classList.remove('rep-animation'), 500);
 }
 
 function animateLeftRep() {
@@ -646,11 +658,11 @@ function toggleProcessingMode() {
 function resetAll() {
     leftArmCounter = 0;
     rightArmCounter = 0;
+    totalReps = 0;
     leftStageState = null;
     rightStageState = null;
     
-    updateLeftCounter();
-    updateRightCounter();
+    updateCounters();
     updateLeftStage('--', '#a0a0c0');
     updateRightStage('--', '#a0a0c0');
     updateLeftStageProgress(0);
@@ -658,11 +670,9 @@ function resetAll() {
     clearCanvas();
     
     // Visual feedback
-    leftCounter.style.color = '#FF6B6B';
-    rightCounter.style.color = '#FF6B6B';
+    totalCounterElement.style.color = '#FF6B6B';
     setTimeout(() => {
-        leftCounter.style.color = '#FF6B6B';
-        rightCounter.style.color = '#4CC9F0';
+        totalCounterElement.style.color = '#00dbde';
     }, 300);
 }
 
@@ -684,6 +694,9 @@ async function startCamera() {
         });
         
         videoElement.srcObject = mediaStream;
+        
+        // Apply mirror effect
+        videoElement.style.transform = 'scaleX(-1)';
         
         await new Promise((resolve) => {
             videoElement.onloadedmetadata = resolve;
@@ -732,26 +745,27 @@ function startFPSCounter() {
 apiToggleBtn.addEventListener('click', toggleProcessingMode);
 resetBtn.addEventListener('click', resetAll);
 
-// Counter tap to reset
-leftCounter.addEventListener('click', () => {
-    leftArmCounter = 0;
-    updateLeftCounter();
+// Total counter tap to reset
+totalCounterElement.addEventListener('click', () => {
+    totalReps = 0;
+    updateCounters();
 });
 
-rightCounter.addEventListener('click', () => {
-    rightArmCounter = 0;
-    updateRightCounter();
+// Mobile summary tap to reset
+totalRepsElement.addEventListener('click', () => {
+    totalReps = 0;
+    updateCounters();
 });
 
 // ==================== INITIALIZATION ====================
 
 window.addEventListener('DOMContentLoaded', async () => {
-    console.log('Starting Dual Arm Angle Tracking...');
+    console.log('Starting Dual Arm Angle Tracking with Mirror View...');
     
     await startCamera();
     updateProcessingMode();
     
-    console.log('System ready - Left/Right correctly mapped');
+    console.log('System ready - Mirror view active');
 });
 
 // Cleanup
