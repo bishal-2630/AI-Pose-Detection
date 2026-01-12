@@ -37,89 +37,83 @@
         <div class="detection-container">
 
             <div class="top-bar">
-                <button id="backBtn" class="back-btn">← Back to Exercises</button>
+                <button id="backBtn" class="back-btn">← Back</button>
                 <div class="current-exercise">
                     Current: <span id="currentExerciseName">Bicep Curls</span>
                 </div>
             </div>
 
-            <div class="container">
-                <header>
-                    <h1>🤸 Full Body Pose Detection</h1>
-
-                    <!-- Moved angles and points below title -->
-                    <div class="title-stats">
-                        <div class="title-angles">
-                            <div class="title-angle-group">
-                                <div class="title-angle-item">
-                                    <span class="title-angle-label">Left Arm:</span>
-                                    <span id="leftAngleTitle" class="title-angle-value">--°</span>
-                                </div>
-                                <div class="title-angle-item">
-                                    <span class="title-angle-label">Right Arm:</span>
-                                    <span id="rightAngleTitle" class="title-angle-value">--°</span>
-                                </div>
-                            </div>
-                            <div class="title-points">
-                                <span id="landmarkTitle" class="title-points-value">Points: 0/33</span>
-                            </div>
+            <div class="controls-panel">
+                <div class="counter-display">
+                    <div class="counter-title">Arm Counters</div>
+                    <div class="counter-group">
+                        <div class="counter-item">
+                            <span class="counter-label">Left:</span>
+                            <span id="leftCounter" class="counter-value">0</span>
+                        </div>
+                        <div class="counter-item">
+                            <span class="counter-label">Right:</span>
+                            <span id="rightCounter" class="counter-value">0</span>
+                        </div>
+                        <div class="counter-item">
+                            <span class="counter-label">Total:</span>
+                            <span id="totalCounter" class="counter-value">0</span>
                         </div>
                     </div>
-                </header>
+                </div>
 
-                <div class="content">
-                    <!-- Video Feed -->
-                    <div class="video-section">
-                        <div class="video-container">
-                            <!-- Mirror view for natural perception -->
-                            <video id="webcam" autoplay playsinline muted></video>
-                            <canvas id="overlayCanvas"></canvas>
-
-                            <div class="overlay-display">
-                                <!-- Combined reps counter -->
-                                <div class="reps-counter-container">
-                                    <div class="reps-counter">
-                                        <span class="reps-label">Total Reps</span>
-                                        <span id="totalRepsDisplay" class="reps-value">0</span>
+                <div class="container">
+                    <header>
+                        <!-- Moved angles and points below title -->
+                        <div class="title-stats">
+                            <div class="title-angles">
+                                <div class="title-angle-group">
+                                    <div class="title-angle-item">
+                                        <span class="title-angle-label">Left Arm:</span>
+                                        <span id="leftAngleTitle" class="title-angle-value">--°</span>
+                                    </div>
+                                    <div class="title-angle-item">
+                                        <span class="title-angle-label">Right Arm:</span>
+                                        <span id="rightAngleTitle" class="title-angle-value">--°</span>
                                     </div>
                                 </div>
-
-                                <div class="detection-info">
-                                    <span id="poseStatus" class="pose-status">Initializing...</span>
+                                <div class="title-points">
+                                    <span id="landmarkTitle" class="title-points-value">Points: 0/33</span>
                                 </div>
                             </div>
                         </div>
+                    </header>
 
-                        <div class="controls-panel">
-                            <div class="counter-display">
-                                <div class="counter-title">Arm Counters</div>
-                                <div class="counter-group">
-                                    <div class="counter-item">
-                                        <span class="counter-label">Left:</span>
-                                        <span id="leftCounter" class="counter-value">0</span>
+                    <div class="action-buttons">
+                        <button id="resetBtn" class="btn btn-reset">
+                            <span class="btn-icon">🔄</span>
+                            <span class="btn-text">Reset All</span>
+                        </button>
+                    </div>
+
+                    <div class="content">
+                        <!-- Video Feed -->
+                        <div class="video-section">
+                            <div class="video-container">
+                                <!-- Mirror view for natural perception -->
+                                <video id="webcam" autoplay playsinline muted></video>
+                                <canvas id="overlayCanvas"></canvas>
+
+                                <div class="overlay-display">
+                                    <!-- Combined reps counter -->
+                                    <div class="reps-counter-container">
+                                        <div class="reps-counter">
+                                            <span class="reps-label"> Reps</span>
+                                            <span id="totalRepsDisplay" class="reps-value">0</span>
+                                        </div>
                                     </div>
-                                    <div class="counter-item">
-                                        <span class="counter-label">Right:</span>
-                                        <span id="rightCounter" class="counter-value">0</span>
-                                    </div>
-                                    <div class="counter-item">
-                                        <span class="counter-label">Total:</span>
-                                        <span id="totalCounter" class="counter-value">0</span>
+
+                                    <div class="detection-info">
+                                        <span id="poseStatus" class="pose-status">Initializing...</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="action-buttons">
-                                <button id="resetBtn" class="btn btn-reset">
-                                    <span class="btn-icon">🔄</span>
-                                    <span class="btn-text">Reset All</span>
-                                </button>
-
-                                <button id="apiToggle" class="btn btn-api">
-                                    <span class="btn-icon">🌐</span>
-                                    <span class="btn-text">API Mode</span>
-                                </button>
-                            </div>
                         </div>
                     </div>
 
