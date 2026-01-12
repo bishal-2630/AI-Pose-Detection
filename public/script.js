@@ -32,6 +32,10 @@ const detectionStatus = document.getElementById('detectionStatus');
 const armVisibility = document.getElementById('armVisibility');
 const resetBtn = document.getElementById('resetBtn');
 const apiToggleBtn = document.getElementById('apiToggle');
+const selectionPage = document.getElementById('selectionPage');
+const detectionPage = document.getElementById('detectionPage');
+const backBtn = document.getElementById('backBtn');
+const currentExerciseName = document.getElementById('currentExerciseName');
 
 // State variables
 let leftArmCounter = 0;
@@ -51,6 +55,83 @@ let landmarks = null;
 let detectionConfidence = 0;
 let repInProgress = false;
 let lastTime = 0;
+let selectedExercise = 'bicep_curl';
+
+const exerciseNames = {
+    bicep_curl: 'Bicep Curls',
+    pull_up: 'Pull-ups',
+    push_up: 'Push-ups'
+};
+
+// Go to detection page with selected exercise
+function goToDetectionPage(exerciseType) {
+    selectedExercise = exerciseType;
+    
+    // Update UI
+    currentExerciseName.textContent = exerciseNames[exerciseType];
+    
+    // Update page title based on exercise
+    const titleElement = document.querySelector('h1');
+    if (titleElement) {
+        titleElement.textContent = `🤸 ${exerciseNames[exerciseType]} Tracker`;
+    }
+    
+    // Switch pages
+    selectionPage.classList.remove('active');
+    detectionPage.classList.add('active');
+    
+    // Start camera if not already started
+    if (!mediaStream) {
+        startCamera();
+    }
+    
+    // Reset counters for new exercise
+    if (typeof resetAll === 'function') {
+        resetAll();
+    }
+    
+    console.log(`Starting ${exerciseNames[exerciseType]} tracking...`);
+}
+
+// Go back to selection page
+function goToSelectionPage() {
+    detectionPage.classList.remove('active');
+    selectionPage.classList.add('active');
+    
+    // Stop camera to save resources
+    if (camera) {
+        camera.stop();
+        camera = null;
+    }
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+    }
+    
+    // Reset pose detection
+    pose = null;
+}
+
+// Add click events to exercise items
+document.addEventListener('DOMContentLoaded', function() {
+    // Add click events to exercise items
+    const exerciseItems = document.querySelectorAll('.exercise-item');
+    exerciseItems.forEach(item => {
+        item.addEventListener('click', function() {
+            const exercise = this.getAttribute('data-exercise');
+            goToDetectionPage(exercise);
+        });
+    });
+    
+    // Add click event to back button
+    if (backBtn) {
+        backBtn.addEventListener('click', goToSelectionPage);
+    }
+    
+    // Initialize with selection page visible
+    selectionPage.classList.add('active');
+    detectionPage.classList.remove('active');
+});
 
 // Colors for correct left/right mapping (person's perspective)
 const COLORS = {

@@ -4,221 +4,266 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Full Body Pose Detection - Dual Arm Angles</title>
+    <title>Fitness Tracker - Select Exercise</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <div class="container">
-        <header>
-            <h1>🤸 Full Body Pose Detection</h1>
-            <p class="subtitle">Real-time dual arm angle tracking with correct left/right mapping</p>
+    <!-- Exercise Selection Page (shown first) -->
+    <div id="selectionPage" class="page active">
+        <div class="selection-container">
+            <header class="selection-header">
+                <h1>🏋️‍♂️ Fitness Tracker</h1>
+                <p>Select your exercise to begin</p>
+            </header>
 
-            <!-- Moved angles and points below title -->
-            <div class="title-stats">
-                <div class="title-angles">
-                    <div class="title-angle-group">
-                        <div class="title-angle-item">
-                            <span class="title-angle-label">Left Arm:</span>
-                            <span id="leftAngleTitle" class="title-angle-value">--°</span>
-                        </div>
-                        <div class="title-angle-item">
-                            <span class="title-angle-label">Right Arm:</span>
-                            <span id="rightAngleTitle" class="title-angle-value">--°</span>
-                        </div>
-                    </div>
-                    <div class="title-points">
-                        <span id="landmarkTitle" class="title-points-value">Points: 0/33</span>
-                    </div>
+            <div class="exercise-list">
+                <div class="exercise-item" data-exercise="bicep_curl">
+                    💪 Bicep Curls
                 </div>
-            </div>
-        </header>
-
-        <div class="content">
-            <!-- Video Feed -->
-            <div class="video-section">
-                <div class="video-container">
-                    <!-- Mirror view for natural perception -->
-                    <video id="webcam" autoplay playsinline muted></video>
-                    <canvas id="overlayCanvas"></canvas>
-
-                    <div class="overlay-display">
-                        <!-- Combined reps counter -->
-                        <div class="reps-counter-container">
-                            <div class="reps-counter">
-                                <span class="reps-label">Total Reps</span>
-                                <span id="totalRepsDisplay" class="reps-value">0</span>
-                            </div>
-                        </div>
-
-                        <div class="detection-info">
-                            <span id="poseStatus" class="pose-status">Initializing...</span>
-                        </div>
-                    </div>
+                <div class="exercise-item" data-exercise="pull_up">
+                    ⬆️ Pull-ups
                 </div>
 
-                <div class="controls-panel">
-                    <div class="counter-display">
-                        <div class="counter-title">Arm Counters</div>
-                        <div class="counter-group">
-                            <div class="counter-item">
-                                <span class="counter-label">Left:</span>
-                                <span id="leftCounter" class="counter-value">0</span>
-                            </div>
-                            <div class="counter-item">
-                                <span class="counter-label">Right:</span>
-                                <span id="rightCounter" class="counter-value">0</span>
-                            </div>
-                            <div class="counter-item">
-                                <span class="counter-label">Total:</span>
-                                <span id="totalCounter" class="counter-value">0</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="action-buttons">
-                        <button id="resetBtn" class="btn btn-reset">
-                            <span class="btn-icon">🔄</span>
-                            <span class="btn-text">Reset All</span>
-                        </button>
-
-                        <button id="apiToggle" class="btn btn-api">
-                            <span class="btn-icon">🌐</span>
-                            <span class="btn-text">API Mode</span>
-                        </button>
-                    </div>
+                <div class="exercise-item" data-exercise="push_up">
+                    ⬇️ Push-ups
                 </div>
             </div>
 
-            <!-- Stats Panel -->
-            <div class="stats-panel">
-                <!-- Real-time Angles -->
-                <div class="angles-card">
-                    <h2>📐 Dual Arm Angles</h2>
-                    <div class="angles-display">
-                        <div class="angle-gauge left-angle">
-                            <div class="gauge-header">
-                                <span class="arm-label">Left Arm</span>
-                                <span id="leftAngleValue" class="angle-text">--°</span>
-                            </div>
-                            <div class="gauge-circle">
-                                <div class="circle-fill" id="leftAngleFill"></div>
-                                <div class="circle-center">
-                                    <div class="angle-stage" id="leftStage">--</div>
-                                </div>
-                            </div>
-                            <div class="gauge-footer">
-                                <div class="stage-indicator" id="leftStageIndicator"></div>
-                                <span class="stage-text" id="leftStageText">Ready</span>
-                            </div>
-                        </div>
+            <footer class="selection-footer">
+                <p>Click on an exercise to start pose tracking</p>
+            </footer>
+        </div>
+    </div>
 
-                        <div class="angle-gauge right-angle">
-                            <div class="gauge-header">
-                                <span class="arm-label">Right Arm</span>
-                                <span id="rightAngleValue" class="angle-text">--°</span>
-                            </div>
-                            <div class="gauge-circle">
-                                <div class="circle-fill" id="rightAngleFill"></div>
-                                <div class="circle-center">
-                                    <div class="angle-stage" id="rightStage">--</div>
+    <!-- Pose Detection Page (hidden initially) -->
+    <div id="detectionPage" class="page">
+        <div class="detection-container">
+            <!-- Add a simple back button at the top -->
+            <div class="top-bar">
+                <button id="backBtn" class="back-btn">← Back to Exercises</button>
+                <div class="current-exercise">
+                    Current: <span id="currentExerciseName">Bicep Curls</span>
+                </div>
+            </div>
+
+            <!-- YOUR EXISTING DETECTION PAGE CONTENT GOES HERE -->
+            <!-- Copy everything from your current index.html starting from <div class="container"> -->
+            <!-- But remove the outer <div class="container"> wrapper -->
+
+            <div class="container">
+                <header>
+                    <h1>🤸 Full Body Pose Detection</h1>
+                    <p class="subtitle">Real-time dual arm angle tracking with correct left/right mapping</p>
+
+                    <!-- Moved angles and points below title -->
+                    <div class="title-stats">
+                        <div class="title-angles">
+                            <div class="title-angle-group">
+                                <div class="title-angle-item">
+                                    <span class="title-angle-label">Left Arm:</span>
+                                    <span id="leftAngleTitle" class="title-angle-value">--°</span>
+                                </div>
+                                <div class="title-angle-item">
+                                    <span class="title-angle-label">Right Arm:</span>
+                                    <span id="rightAngleTitle" class="title-angle-value">--°</span>
                                 </div>
                             </div>
-                            <div class="gauge-footer">
-                                <div class="stage-indicator" id="rightStageIndicator"></div>
-                                <span class="stage-text" id="rightStageText">Ready</span>
+                            <div class="title-points">
+                                <span id="landmarkTitle" class="title-points-value">Points: 0/33</span>
                             </div>
                         </div>
                     </div>
-                </div>
+                </header>
 
-                <!-- Performance Stats -->
-                <div class="performance-card">
-                    <h2>📊 Performance</h2>
-                    <div class="stats-grid">
-                        <div class="stat-item">
-                            <div class="stat-icon">🎯</div>
-                            <div class="stat-content">
-                                <div class="stat-label">Landmarks Detected</div>
-                                <div class="stat-value" id="detectedPoints">0</div>
-                                <div class="stat-progress">
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" id="landmarksProgress"></div>
+                <div class="content">
+                    <!-- Video Feed -->
+                    <div class="video-section">
+                        <div class="video-container">
+                            <!-- Mirror view for natural perception -->
+                            <video id="webcam" autoplay playsinline muted></video>
+                            <canvas id="overlayCanvas"></canvas>
+
+                            <div class="overlay-display">
+                                <!-- Combined reps counter -->
+                                <div class="reps-counter-container">
+                                    <div class="reps-counter">
+                                        <span class="reps-label">Total Reps</span>
+                                        <span id="totalRepsDisplay" class="reps-value">0</span>
+                                    </div>
+                                </div>
+
+                                <div class="detection-info">
+                                    <span id="poseStatus" class="pose-status">Initializing...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="controls-panel">
+                            <div class="counter-display">
+                                <div class="counter-title">Arm Counters</div>
+                                <div class="counter-group">
+                                    <div class="counter-item">
+                                        <span class="counter-label">Left:</span>
+                                        <span id="leftCounter" class="counter-value">0</span>
+                                    </div>
+                                    <div class="counter-item">
+                                        <span class="counter-label">Right:</span>
+                                        <span id="rightCounter" class="counter-value">0</span>
+                                    </div>
+                                    <div class="counter-item">
+                                        <span class="counter-label">Total:</span>
+                                        <span id="totalCounter" class="counter-value">0</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button id="resetBtn" class="btn btn-reset">
+                                    <span class="btn-icon">🔄</span>
+                                    <span class="btn-text">Reset All</span>
+                                </button>
+
+                                <button id="apiToggle" class="btn btn-api">
+                                    <span class="btn-icon">🌐</span>
+                                    <span class="btn-text">API Mode</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats Panel -->
+                    <div class="stats-panel">
+                        <!-- Real-time Angles -->
+                        <div class="angles-card">
+                            <h2>📐 Dual Arm Angles</h2>
+                            <div class="angles-display">
+                                <div class="angle-gauge left-angle">
+                                    <div class="gauge-header">
+                                        <span class="arm-label">Left Arm</span>
+                                        <span id="leftAngleValue" class="angle-text">--°</span>
+                                    </div>
+                                    <div class="gauge-circle">
+                                        <div class="circle-fill" id="leftAngleFill"></div>
+                                        <div class="circle-center">
+                                            <div class="angle-stage" id="leftStage">--</div>
+                                        </div>
+                                    </div>
+                                    <div class="gauge-footer">
+                                        <div class="stage-indicator" id="leftStageIndicator"></div>
+                                        <span class="stage-text" id="leftStageText">Ready</span>
+                                    </div>
+                                </div>
+
+                                <div class="angle-gauge right-angle">
+                                    <div class="gauge-header">
+                                        <span class="arm-label">Right Arm</span>
+                                        <span id="rightAngleValue" class="angle-text">--°</span>
+                                    </div>
+                                    <div class="gauge-circle">
+                                        <div class="circle-fill" id="rightAngleFill"></div>
+                                        <div class="circle-center">
+                                            <div class="angle-stage" id="rightStage">--</div>
+                                        </div>
+                                    </div>
+                                    <div class="gauge-footer">
+                                        <div class="stage-indicator" id="rightStageIndicator"></div>
+                                        <span class="stage-text" id="rightStageText">Ready</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="stat-item">
-                            <div class="stat-icon">⚡</div>
-                            <div class="stat-content">
-                                <div class="stat-label">Processing Mode</div>
-                                <div class="stat-value" id="processingMode">API</div>
-                                <div class="stat-detail" id="latencyDisplay">Latency: --ms</div>
+                        <!-- Performance Stats -->
+                        <div class="performance-card">
+                            <h2>📊 Performance</h2>
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <div class="stat-icon">🎯</div>
+                                    <div class="stat-content">
+                                        <div class="stat-label">Landmarks Detected</div>
+                                        <div class="stat-value" id="detectedPoints">0</div>
+                                        <div class="stat-progress">
+                                            <div class="progress-bar">
+                                                <div class="progress-fill" id="landmarksProgress"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="stat-item">
+                                    <div class="stat-icon">⚡</div>
+                                    <div class="stat-content">
+                                        <div class="stat-label">Processing Mode</div>
+                                        <div class="stat-value" id="processingMode">API</div>
+                                        <div class="stat-detail" id="latencyDisplay">Latency: --ms</div>
+                                    </div>
+                                </div>
+
+                                <div class="stat-item">
+                                    <div class="stat-icon">📈</div>
+                                    <div class="stat-content">
+                                        <div class="stat-label">Frame Rate</div>
+                                        <div class="stat-value" id="fpsCounter">-- FPS</div>
+                                        <div class="stat-detail" id="confidenceDisplay">Confidence: --%</div>
+                                    </div>
+                                </div>
+
+                                <div class="stat-item">
+                                    <div class="stat-icon">🤖</div>
+                                    <div class="stat-content">
+                                        <div class="stat-label">Detection Status</div>
+                                        <div class="stat-value" id="detectionStatus">Ready</div>
+                                        <div class="stat-detail" id="armVisibility">Arms: --</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="stat-item">
-                            <div class="stat-icon">📈</div>
-                            <div class="stat-content">
-                                <div class="stat-label">Frame Rate</div>
-                                <div class="stat-value" id="fpsCounter">-- FPS</div>
-                                <div class="stat-detail" id="confidenceDisplay">Confidence: --%</div>
+                        <!-- Landmark Legend -->
+                        <div class="legend-card">
+                            <h2>📍 Landmark Colors</h2>
+                            <div class="legend-grid">
+                                <div class="legend-item">
+                                    <span class="legend-dot" style="background: #FF6B6B;"></span>
+                                    <span class="legend-text">Left Side Points</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-dot" style="background: #4CC9F0;"></span>
+                                    <span class="legend-text">Right Side Points</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-dot" style="background: #FFD166;"></span>
+                                    <span class="legend-text">Center Points</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-dot" style="background: #06D6A0;"></span>
+                                    <span class="legend-text">Angle Arcs</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-dot" style="background: #118AB2;"></span>
+                                    <span class="legend-text">Skeleton Lines</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-dot" style="background: #EF476F;"></span>
+                                    <span class="legend-text">Active Arm</span>
+                                </div>
                             </div>
-                        </div>
-
-                        <div class="stat-item">
-                            <div class="stat-icon">🤖</div>
-                            <div class="stat-content">
-                                <div class="stat-label">Detection Status</div>
-                                <div class="stat-value" id="detectionStatus">Ready</div>
-                                <div class="stat-detail" id="armVisibility">Arms: --</div>
+                            <div class="legend-note">
+                                <p>💡 <strong>Note:</strong> Left/right now correctly match your body sides on screen
+                                </p>
+                                <p>Camera view is mirrored for natural movement perception</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Landmark Legend -->
-                <div class="legend-card">
-                    <h2>📍 Landmark Colors</h2>
-                    <div class="legend-grid">
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background: #FF6B6B;"></span>
-                            <span class="legend-text">Left Side Points</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background: #4CC9F0;"></span>
-                            <span class="legend-text">Right Side Points</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background: #FFD166;"></span>
-                            <span class="legend-text">Center Points</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background: #06D6A0;"></span>
-                            <span class="legend-text">Angle Arcs</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background: #118AB2;"></span>
-                            <span class="legend-text">Skeleton Lines</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background: #EF476F;"></span>
-                            <span class="legend-text">Active Arm</span>
-                        </div>
-                    </div>
-                    <div class="legend-note">
-                        <p>💡 <strong>Note:</strong> Left/right now correctly match your body sides on screen</p>
-                        <p>Camera view is mirrored for natural movement perception</p>
-                    </div>
-                </div>
+                <footer>
+                    <p>Dual Arm Angle Tracking | Combined Rep Counting | Mirror View Enabled</p>
+                    <p class="footer-note">Left/right correctly mapped to your actual body sides</p>
+                </footer>
             </div>
         </div>
-
-        <footer>
-            <p>Dual Arm Angle Tracking | Combined Rep Counting | Mirror View Enabled</p>
-            <p class="footer-note">Left/right correctly mapped to your actual body sides</p>
-        </footer>
     </div>
 
     <script src="script.js"></script>
