@@ -9,11 +9,11 @@
 </head>
 
 <body>
-    <!-- Exercise Selection Page (shown first) -->
+    <!-- Exercise Selection Page  -->
     <div id="selectionPage" class="page active">
         <div class="selection-container">
             <header class="selection-header">
-                <h1>🏋️‍♂️ Fitness Tracker</h1>
+                <h1>🏋️‍♂️ Exercise Tracker</h1>
                 <p>Select your exercise to begin</p>
             </header>
 
@@ -29,17 +29,13 @@
                     ⬇️ Push-ups
                 </div>
             </div>
-
-            <footer class="selection-footer">
-                <p>Click on an exercise to start pose tracking</p>
-            </footer>
         </div>
     </div>
 
-    <!-- Pose Detection Page (hidden initially) -->
+    <!-- Pose Detection Page -->
     <div id="detectionPage" class="page">
         <div class="detection-container">
-            <!-- Add a simple back button at the top -->
+
             <div class="top-bar">
                 <button id="backBtn" class="back-btn">← Back to Exercises</button>
                 <div class="current-exercise">
@@ -47,14 +43,9 @@
                 </div>
             </div>
 
-            <!-- YOUR EXISTING DETECTION PAGE CONTENT GOES HERE -->
-            <!-- Copy everything from your current index.html starting from <div class="container"> -->
-            <!-- But remove the outer <div class="container"> wrapper -->
-
             <div class="container">
                 <header>
                     <h1>🤸 Full Body Pose Detection</h1>
-                    <p class="subtitle">Real-time dual arm angle tracking with correct left/right mapping</p>
 
                     <!-- Moved angles and points below title -->
                     <div class="title-stats">
@@ -249,19 +240,9 @@
                                     <span class="legend-text">Active Arm</span>
                                 </div>
                             </div>
-                            <div class="legend-note">
-                                <p>💡 <strong>Note:</strong> Left/right now correctly match your body sides on screen
-                                </p>
-                                <p>Camera view is mirrored for natural movement perception</p>
-                            </div>
                         </div>
                     </div>
                 </div>
-
-                <footer>
-                    <p>Dual Arm Angle Tracking | Combined Rep Counting | Mirror View Enabled</p>
-                    <p class="footer-note">Left/right correctly mapped to your actual body sides</p>
-                </footer>
             </div>
         </div>
     </div>

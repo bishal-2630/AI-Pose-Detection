@@ -80,10 +80,7 @@ function goToDetectionPage(exerciseType) {
     selectionPage.classList.remove('active');
     detectionPage.classList.add('active');
     
-    // Start camera if not already started
-    if (!mediaStream) {
-        startCamera();
-    }
+
     
     // Reset counters for new exercise
     if (typeof resetAll === 'function') {
