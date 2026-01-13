@@ -1273,7 +1273,7 @@ function updateLandmarkStats(count) {
     if (confidenceDisplay) {
         confidenceDisplay.textContent = `Confidence: ${detectionConfidence}%`;
         confidenceDisplay.style.color = detectionConfidence > 70 ? '#4CC9F0' :
-                                       detectionConfidence > 50 ? '#FFD166' : '#FF6B6B';
+                                    detectionConfidence > 50 ? '#FFD166' : '#FF6B6B';
     }
 }
 
