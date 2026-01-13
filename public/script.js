@@ -61,10 +61,10 @@ const exerciseConfig = {
     },
     push_up: {
         name: 'Push-ups',
-        angleUp: 60,
+        angleUp: 90,
         angleDown: 150,
-        upLabel: 'DOWN',
-        downLabel: 'UP',
+        upLabel: 'UP',
+        downLabel: 'DOWN',
         upColor: '#EF476F',
         downColor: '#FFD166',
         readyColor: '#a0a0c0',
@@ -356,27 +356,31 @@ async function initializeMediaPipe() {
     try {
         console.log('Initializing MediaPipe Pose...');
         
-        // Create pose instance
+        // Create pose instance with optimized settings for real-time
         pose = new window.Pose({
             locateFile: (file) => {
-                // IMPORTANT: Do NOT add cache-busting parameters here
                 return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
             }
         });
         
-        // Set pose options
+        // Set pose options for better real-time performance
         pose.setOptions({
-            modelComplexity: 1,
+            modelComplexity: 1, // 0=light, 1=full, 2=heavy
             smoothLandmarks: true,
             enableSegmentation: false,
-            smoothSegmentation: false, // Set to false for stability
+            smoothSegmentation: false,
             minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
+            minTrackingConfidence: 0.5,
+            selfieMode: true // Better for front-facing camera
         });
         
-        // Set results callback
+        // Set results callback with error handling
         pose.onResults((results) => {
-            onPoseResults(results);
+            try {
+                onPoseResults(results);
+            } catch (error) {
+                console.error('Error in pose results callback:', error);
+            }
         });
         
         console.log('MediaPipe Pose initialized successfully');
@@ -387,7 +391,6 @@ async function initializeMediaPipe() {
         return false;
     }
 }
-
 // ==================== CAMERA MANAGEMENT ====================
 
 async function initializeAndStartCamera() {
@@ -402,16 +405,8 @@ async function initializeAndStartCamera() {
         updateStatus('Initializing camera...');
         console.log('Starting camera for exercise:', selectedExercise);
         
-        // Ensure clean start
-        if (camera) {
-            camera.stop();
-            camera = null;
-        }
-        if (mediaStream) {
-            mediaStream.getTracks().forEach(track => track.stop());
-            mediaStream = null;
-        }
-        videoElement.srcObject = null;
+        // Clean up any existing streams
+        cleanupCamera();
         
         // Load MediaPipe if needed
         if (!window.Pose || !window.Camera) {
@@ -426,13 +421,14 @@ async function initializeAndStartCamera() {
             }
         }
         
-        // Get camera stream
+        // Get camera stream with optimized settings
         console.log('Requesting camera access...');
         const constraints = {
             video: { 
-                width: { ideal: 640 }, 
-                height: { ideal: 480 }, 
-                facingMode: 'user' 
+                width: { ideal: 640, max: 1280 },
+                height: { ideal: 480, max: 720 },
+                facingMode: 'user',
+                frameRate: { ideal: 30, min: 15 }
             },
             audio: false
         };
@@ -450,23 +446,22 @@ async function initializeAndStartCamera() {
         videoElement.srcObject = mediaStream;
         
         // Wait for video to be ready
-        console.log('Waiting for video to be ready...');
         await waitForVideoReady();
         
-        // Set canvas size
+        // Set canvas size to match video
         overlayCanvas.width = videoElement.videoWidth;
         overlayCanvas.height = videoElement.videoHeight;
-        console.log(`Canvas size set to: ${overlayCanvas.width}x${overlayCanvas.height}`);
+        console.log(`Canvas size: ${overlayCanvas.width}x${overlayCanvas.height}`);
         
-        // Create and start camera
+        // Create and start camera with requestAnimationFrame for smoothness
         console.log('Creating MediaPipe Camera...');
         camera = new window.Camera(videoElement, {
             onFrame: async () => {
-                if (pose && videoElement.videoWidth > 0) {
+                if (pose && videoElement.readyState >= 2) {
                     try {
                         await pose.send({ image: videoElement });
                     } catch (error) {
-                        console.error('Frame processing error:', error);
+                        console.error('Error sending frame to pose:', error);
                     }
                 }
             },
@@ -476,30 +471,60 @@ async function initializeAndStartCamera() {
         
         await camera.start();
         console.log('Camera started successfully');
-        updateStatus('Ready - Move into frame!');
+        updateStatus('Ready - Pose tracking active');
         
         isInitialized = true;
         
+        // Start FPS counter
+        startFPSCounter();
+        
     } catch (error) {
         console.error('Camera initialization error:', error);
-        updateStatus('Camera error: ' + error.message);
+        updateStatus('Error: ' + error.message);
         
         if (error.name === 'NotAllowedError') {
-            alert('Camera access denied. Please allow camera access.');
+            alert('Camera access denied. Please allow camera access to use the exercise tracker.');
         } else if (error.name === 'NotFoundError') {
             alert('No camera found. Please connect a camera.');
         } else {
-            alert('Failed to start camera. Please refresh the page and try again.');
+            alert('Failed to start camera. Error: ' + error.message);
         }
         
-        // Go back to selection page on error
         setTimeout(() => {
             goToSelectionPage();
-        }, 1000);
+        }, 2000);
         
     } finally {
         isCameraStarting = false;
     }
+}
+
+function cleanupCamera() {
+    // Stop camera processing
+    if (camera) {
+        try {
+            camera.stop();
+        } catch (error) {
+            console.warn('Error stopping camera:', error);
+        }
+        camera = null;
+    }
+    
+    // Stop media stream
+    if (mediaStream) {
+        try {
+            mediaStream.getTracks().forEach(track => {
+                track.stop();
+            });
+        } catch (error) {
+            console.warn('Error stopping media stream:', error);
+        }
+        mediaStream = null;
+    }
+    
+    // Clear video source
+    videoElement.srcObject = null;
+    videoElement.src = '';
 }
 
 async function waitForVideoReady() {
@@ -565,7 +590,31 @@ function onPoseResults(results) {
         // Calculate and display both arm angles
         calculateArmAngles(landmarks);
         
-        updateStatus(`${detectedCount} points detected`);
+        // Only show status when no arms are detected or when initializing
+        const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
+        const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
+        const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
+        const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
+        const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
+        const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
+        
+        // Check if arms are visible
+        const leftArmVisible = leftShoulder && leftElbow && leftWrist && 
+                               leftShoulder.visibility > 0.3 &&
+                               leftElbow.visibility > 0.3 &&
+                               leftWrist.visibility > 0.3;
+        
+        const rightArmVisible = rightShoulder && rightElbow && rightWrist && 
+                                rightShoulder.visibility > 0.3 &&
+                                rightElbow.visibility > 0.3 &&
+                                rightWrist.visibility > 0.3;
+        
+        if (leftArmVisible || rightArmVisible) {
+            // Arms detected, don't show any message
+            updateStatus('');
+        } else {
+            updateStatus('Move arms into frame');
+        }
         
         // Update latency
         const latency = Math.round(performance.now() - startTime);
@@ -574,7 +623,7 @@ function onPoseResults(results) {
         landmarks = null;
         clearCanvas();
         updateLandmarkStats(0);
-        updateStatus('Move into frame - No pose detected');
+        updateStatus('Move into frame');
     }
     
     frameCount++;
@@ -596,23 +645,31 @@ function calculateConfidence(results) {
 }
 
 function drawSkeleton(results) {
-    if (!results || !results.poseLandmarks) {
+    if (!results || !results.poseLandmarks || !overlayCanvas || !canvasCtx) {
         return;
     }
     
     const videoWidth = overlayCanvas.width;
     const videoHeight = overlayCanvas.height;
     
-    // Draw all connections first
-    drawConnections(results.poseLandmarks, videoWidth, videoHeight);
+    // Clear canvas
+    clearCanvas();
     
-    // Draw all landmarks on top
-    drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
+    // Draw connections first (skeleton lines)
+    if (results.poseLandmarks) {
+        drawConnections(results.poseLandmarks, videoWidth, videoHeight);
+    }
+    
+    // Draw landmarks on top
+    if (results.poseLandmarks) {
+        drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
+    }
     
     // Draw arm angles
-    drawArmAngles(results.poseLandmarks, videoWidth, videoHeight);
+    if (results.poseLandmarks) {
+        drawArmAngles(results.poseLandmarks, videoWidth, videoHeight);
+    }
 }
-
 function drawConnections(landmarks, width, height) {
     if (!landmarks) return;
     
@@ -900,44 +957,17 @@ function calculateAngle(a, b, c) {
 function countExercise(angle, side) {
     const config = exerciseConfig[selectedExercise];
     
-    // Reset repInProgress when both arms are extended
-    if (selectedExercise === 'bicep_curl') {
-        if (side === 'right' && angle > 160 && leftArmAngle > 160) {
-            repInProgress = false;
-        }
-        if (side === 'left' && angle > 160 && rightArmAngle > 160) {
-            repInProgress = false;
-        }
-    } else if (selectedExercise === 'pull_up') {
-        if (side === 'right' && angle > 140 && leftArmAngle > 140) {
-            repInProgress = false;
-        }
-        if (side === 'left' && angle > 140 && rightArmAngle > 140) {
-            repInProgress = false;
-        }
-    } else if (selectedExercise === 'push_up') {
-        if (side === 'right' && angle > 160 && leftArmAngle > 160) {
-            repInProgress = false;
-        }
-        if (side === 'left' && angle > 160 && rightArmAngle > 160) {
-            repInProgress = false;
-        }
-    }
-    
-    // Get form validation results
-    const handsAbove = areHandsAboveShoulders(landmarks);
-    const elbowsBelow = areElbowsBelowShoulders(landmarks);
-    
     // EXERCISE-SPECIFIC COUNTING LOGIC
     if (selectedExercise === 'bicep_curl') {
         // Bicep curl: Count when arm goes from extended (>160) to curled (<45)
-        if (!elbowsBelow) return;
+        if (!areElbowsBelowShoulders(landmarks)) return;
         
         if (side === 'left') {
             if (angle > 160) {
                 leftStageState = "down";
                 updateLeftStage(config.downLabel, config.downColor);
                 updateLeftStageProgress(1);
+                repInProgress = false;
             }
             
             if (angle < 45 && leftStageState === "down") {
@@ -961,6 +991,7 @@ function countExercise(angle, side) {
                 rightStageState = "down";
                 updateRightStage(config.downLabel, config.downColor);
                 updateRightStageProgress(1);
+                repInProgress = false;
             }
             
             if (angle < 45 && rightStageState === "down") {
@@ -983,13 +1014,14 @@ function countExercise(angle, side) {
     } 
     else if (selectedExercise === 'pull_up') {
         // Pull-up: Count when arm goes from extended (>140) to bent (<65)
-        if (!handsAbove) return;
+        if (!areHandsAboveShoulders(landmarks)) return;
         
         if (side === 'left') {
             if (angle > 140) {
                 leftStageState = "down";
                 updateLeftStage(config.downLabel, config.downColor);
                 updateLeftStageProgress(1);
+                repInProgress = false;
             }
             
             if (angle < 65 && leftStageState === "down") {
@@ -1013,6 +1045,7 @@ function countExercise(angle, side) {
                 rightStageState = "down";
                 updateRightStage(config.downLabel, config.downColor);
                 updateRightStageProgress(1);
+                repInProgress = false;
             }
             
             if (angle < 65 && rightStageState === "down") {
@@ -1034,53 +1067,54 @@ function countExercise(angle, side) {
         }
     }
     else if (selectedExercise === 'push_up') {
-        // Push-up: Count when arm goes from extended (>160) to bent (<90)
+        // PUSH-UP SPECIFIC LOGIC: Count when arm goes from extended (>150) to bent (<90)
+        // Reset repInProgress when back to extended position
+        if (side === 'left' && angle > 150) {
+            leftStageState = "up";
+            updateLeftStage(config.upLabel, config.upColor);
+            updateLeftStageProgress(1);
+            repInProgress = false;
+        }
         
-        if (side === 'left') {
-            if (angle > 160) {
-                leftStageState = "up";
-                updateLeftStage(config.downLabel, config.downColor);
-                updateLeftStageProgress(1);
-            }
+        if (side === 'right' && angle > 150) {
+            rightStageState = "up";
+            updateRightStage(config.upLabel, config.upColor);
+            updateRightStageProgress(1);
+            repInProgress = false;
+        }
+        
+        // Count when bending
+        if (side === 'left' && angle < 90 && leftStageState === "up") {
+            leftStageState = "down";
+            leftArmCounter++;
+            updateLeftCounter();
+            updateTotalReps();
+            updateLeftStage(config.downLabel, config.downColor);
+            updateLeftStageProgress(0);
+            animateLeftRep();
             
-            if (angle < 90 && leftStageState === "up") {
-                leftStageState = "down";
-                leftArmCounter++;
-                updateLeftCounter();
-                updateTotalReps();
-                updateLeftStage(config.upLabel, config.upColor);
-                updateLeftStageProgress(0);
-                animateLeftRep();
-                
-                if (!repInProgress) {
-                    repInProgress = true;
-                    totalRepsCounter++;
-                    updateTotalRepsDisplay();
-                    animateTotalRep();
-                }
+            if (!repInProgress) {
+                repInProgress = true;
+                totalRepsCounter++;
+                updateTotalRepsDisplay();
+                animateTotalRep();
             }
-        } else { // right arm
-            if (angle > 160) {
-                rightStageState = "up";
-                updateRightStage(config.downLabel, config.downColor);
-                updateRightStageProgress(1);
-            }
+        }
+        
+        if (side === 'right' && angle < 90 && rightStageState === "up") {
+            rightStageState = "down";
+            rightArmCounter++;
+            updateRightCounter();
+            updateTotalReps();
+            updateRightStage(config.downLabel, config.downColor);
+            updateRightStageProgress(0);
+            animateRightRep();
             
-            if (angle < 90 && rightStageState === "up") {
-                rightStageState = "down";
-                rightArmCounter++;
-                updateRightCounter();
-                updateTotalReps();
-                updateRightStage(config.upLabel, config.upColor);
-                updateRightStageProgress(0);
-                animateRightRep();
-                
-                if (!repInProgress) {
-                    repInProgress = true;
-                    totalRepsCounter++;
-                    updateTotalRepsDisplay();
-                    animateTotalRep();
-                }
+            if (!repInProgress) {
+                repInProgress = true;
+                totalRepsCounter++;
+                updateTotalRepsDisplay();
+                animateTotalRep();
             }
         }
     }
@@ -1293,11 +1327,22 @@ function updateArmVisibility(leftVisible, rightVisible) {
 }
 
 function updateStatus(message) {
-    const config = exerciseConfig[selectedExercise];
-    const statusMessage = `${config.name}: ${message}`;
+    if (poseStatus) {
+        if (message && message.trim() !== '') {
+            const config = exerciseConfig[selectedExercise];
+            const statusMessage = `${config.name}: ${message}`;
+            poseStatus.textContent = statusMessage;
+            poseStatus.style.display = 'block';
+        } else {
+            poseStatus.textContent = '';
+            poseStatus.style.display = 'none';
+        }
+    }
     
-    if (poseStatus) poseStatus.textContent = statusMessage;
-    if (detectionStatus) detectionStatus.textContent = statusMessage;
+    // Keep detection status for the stats panel
+    if (detectionStatus && message && message.trim() !== '') {
+        detectionStatus.textContent = message;
+    }
 }
 
 function updateLatency(latency) {
