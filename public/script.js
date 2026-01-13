@@ -872,66 +872,80 @@ function calculateAngle(a, b, c) {
 function countExercise(angle, side) {
     const config = exerciseConfig[selectedExercise];
     
+    
+    if (selectedExercise === 'bicep_curl') {
+        
+        if (side === 'right' && angle > 160 && leftArmAngle > 160) {
+            repInProgress = false;
+        }
+        if (side === 'left' && angle > 160 && rightArmAngle > 160) {
+            repInProgress = false;
+        }
+    } else if (selectedExercise === 'pull_up') {
+        // For pull-ups: reset when both arms are extended (>120)
+        if (side === 'right' && angle > 120 && leftArmAngle > 120) {
+            repInProgress = false;
+        }
+        if (side === 'left' && angle > 120 && rightArmAngle > 120) {
+            repInProgress = false;
+        }
+    } else if (selectedExercise === 'push_up') {
+        // For push-ups: reset when both arms are extended (>150)
+        if (side === 'right' && angle > 150 && leftArmAngle > 150) {
+            repInProgress = false;
+        }
+        if (side === 'left' && angle > 150 && rightArmAngle > 150) {
+            repInProgress = false;
+        }
+    }
+    
     // EXERCISE-SPECIFIC COUNTING LOGIC
     if (selectedExercise === 'bicep_curl') {
-        // Bicep curl: Count when arm goes from extended (>160) to bent (<40)
-        // NO repInProgress logic for bicep curls - each arm counts independently
-        if (side === 'left') {
-            if (angle > config.angleDown) {
-                leftStageState = "down";
-                updateLeftStage(config.downLabel, config.downColor);
-                updateLeftStageProgress(1);
-            }
-
-            if (angle < config.angleUp && leftStageState === "down") {
-                leftStageState = "up";
-                leftArmCounter++;
-                updateLeftCounter();
-                updateTotalReps();
-                updateLeftStage(config.upLabel, config.upColor);
-                updateLeftStageProgress(0);
-                animateLeftRep();
-                
-                // Always count total rep for bicep curls (single or both arms)
-                totalRepsCounter++;
-                updateTotalRepsDisplay();
-                animateTotalRep();
-            }
-        } else { // right arm
-            if (angle > config.angleDown) {
-                rightStageState = "down";
-                updateRightStage(config.downLabel, config.downColor);
-                updateRightStageProgress(1);
-            }
-
-            if (angle < config.angleUp && rightStageState === "down") {
-                rightStageState = "up";
-                rightArmCounter++;
-                updateRightCounter();
-                updateTotalReps();
-                updateRightStage(config.upLabel, config.upColor);
-                updateRightStageProgress(0);
-                animateRightRep();
-                
-                // Always count total rep for bicep curls (single or both arms)
-                totalRepsCounter++;
-                updateTotalRepsDisplay();
-                animateTotalRep();
-            }
+    if (side === 'left') {
+        if (angle > config.angleDown) {
+            leftStageState = "down";
+            updateLeftStage(config.downLabel, config.downColor);
+            updateLeftStageProgress(1);
         }
-    } 
+
+        if (angle < config.angleUp && leftStageState === "down") {
+            leftStageState = "up";
+            leftArmCounter++;
+            updateLeftCounter();
+            updateTotalReps();
+            updateLeftStage(config.upLabel, config.upColor);
+            updateLeftStageProgress(0);
+            animateLeftRep();
+            
+            // ALWAYS count total rep for bicep curls (single or both arms)
+            totalRepsCounter++;
+            updateTotalRepsDisplay();
+            animateTotalRep();
+        }
+    } else { // right arm
+        if (angle > config.angleDown) {
+            rightStageState = "down";
+            updateRightStage(config.downLabel, config.downColor);
+            updateRightStageProgress(1);
+        }
+
+        if (angle < config.angleUp && rightStageState === "down") {
+            rightStageState = "up";
+            rightArmCounter++;
+            updateRightCounter();
+            updateTotalReps();
+            updateRightStage(config.upLabel, config.upColor);
+            updateRightStageProgress(0);
+            animateRightRep();
+            
+            // ALWAYS count total rep for bicep curls (single or both arms)
+            totalRepsCounter++;
+            updateTotalRepsDisplay();
+            animateTotalRep();
+        }
+    }}
     else if (selectedExercise === 'pull_up') {
         // Pull-up: Count when arm goes from bent (<30) to extended (>120)
-        // Uses repInProgress - both arms should complete movement for one rep
-        
-        // Reset repInProgress when both arms are extended (>120)
-        if (side === 'right' && angle > config.angleDown && leftArmAngle > config.angleDown) {
-            repInProgress = false;
-        }
-        if (side === 'left' && angle > config.angleDown && rightArmAngle > config.angleDown) {
-            repInProgress = false;
-        }
-        
         if (side === 'left') {
             if (angle < config.angleUp) {
                 leftStageState = "up";
@@ -948,7 +962,6 @@ function countExercise(angle, side) {
                 updateLeftStageProgress(0);
                 animateLeftRep();
                 
-                // Only count total rep if not already in progress
                 if (!repInProgress) {
                     repInProgress = true;
                     totalRepsCounter++;
@@ -972,7 +985,56 @@ function countExercise(angle, side) {
                 updateRightStageProgress(0);
                 animateRightRep();
                 
-                // Only count total rep if not already in progress
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        }
+    } 
+     else if (selectedExercise === 'pull_up') {
+        // Pull-up: Count when arm goes from bent (<30) to extended (>120)
+        if (side === 'left') {
+            if (angle < config.angleUp) {
+                leftStageState = "up";
+                updateLeftStage(config.upLabel, config.upColor);
+                updateLeftStageProgress(1);
+            }
+
+            if (angle > config.angleDown && leftStageState === "up") {
+                leftStageState = "down";
+                leftArmCounter++;
+                updateLeftCounter();
+                updateTotalReps();
+                updateLeftStage(config.downLabel, config.downColor);
+                updateLeftStageProgress(0);
+                animateLeftRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        } else { // right arm
+            if (angle < config.angleUp) {
+                rightStageState = "up";
+                updateRightStage(config.upLabel, config.upColor);
+                updateRightStageProgress(1);
+            }
+
+            if (angle > config.angleDown && rightStageState === "up") {
+                rightStageState = "down";
+                rightArmCounter++;
+                updateRightCounter();
+                updateTotalReps();
+                updateRightStage(config.downLabel, config.downColor);
+                updateRightStageProgress(0);
+                animateRightRep();
+                
                 if (!repInProgress) {
                     repInProgress = true;
                     totalRepsCounter++;
@@ -984,15 +1046,6 @@ function countExercise(angle, side) {
     } 
     else if (selectedExercise === 'push_up') {
         // Push-up: Count when arm goes from extended (>150) to bent (<60)
-        // Uses repInProgress - both arms should complete movement for one rep
-        
-        // Reset repInProgress when both arms are extended (>150)
-        if (side === 'right' && angle > config.angleDown && leftArmAngle > config.angleDown) {
-            repInProgress = false;
-        }
-        if (side === 'left' && angle > config.angleDown && rightArmAngle > config.angleDown) {
-            repInProgress = false;
-        }
         
         if (side === 'left') {
             if (angle > config.angleDown) {
@@ -1010,7 +1063,6 @@ function countExercise(angle, side) {
                 updateLeftStageProgress(0);
                 animateLeftRep();
                 
-                // Only count total rep if not already in progress
                 if (!repInProgress) {
                     repInProgress = true;
                     totalRepsCounter++;
@@ -1034,7 +1086,6 @@ function countExercise(angle, side) {
                 updateRightStageProgress(0);
                 animateRightRep();
                 
-                // Only count total rep if not already in progress
                 if (!repInProgress) {
                     repInProgress = true;
                     totalRepsCounter++;
