@@ -356,31 +356,27 @@ async function initializeMediaPipe() {
     try {
         console.log('Initializing MediaPipe Pose...');
         
-        // Create pose instance with optimized settings for real-time
+        // Create pose instance
         pose = new window.Pose({
             locateFile: (file) => {
+                // IMPORTANT: Do NOT add cache-busting parameters here
                 return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
             }
         });
         
-        // Set pose options for better real-time performance
+        // Set pose options
         pose.setOptions({
-            modelComplexity: 1, // 0=light, 1=full, 2=heavy
+            modelComplexity: 1,
             smoothLandmarks: true,
             enableSegmentation: false,
-            smoothSegmentation: false,
+            smoothSegmentation: false, // Set to false for stability
             minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5,
-            selfieMode: true // Better for front-facing camera
+            minTrackingConfidence: 0.5
         });
         
-        // Set results callback with error handling
+        // Set results callback
         pose.onResults((results) => {
-            try {
-                onPoseResults(results);
-            } catch (error) {
-                console.error('Error in pose results callback:', error);
-            }
+            onPoseResults(results);
         });
         
         console.log('MediaPipe Pose initialized successfully');
@@ -391,6 +387,7 @@ async function initializeMediaPipe() {
         return false;
     }
 }
+
 // ==================== CAMERA MANAGEMENT ====================
 
 async function initializeAndStartCamera() {
@@ -405,8 +402,16 @@ async function initializeAndStartCamera() {
         updateStatus('Initializing camera...');
         console.log('Starting camera for exercise:', selectedExercise);
         
-        // Clean up any existing streams
-        cleanupCamera();
+        // Ensure clean start
+        if (camera) {
+            camera.stop();
+            camera = null;
+        }
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+            mediaStream = null;
+        }
+        videoElement.srcObject = null;
         
         // Load MediaPipe if needed
         if (!window.Pose || !window.Camera) {
@@ -421,14 +426,13 @@ async function initializeAndStartCamera() {
             }
         }
         
-        // Get camera stream with optimized settings
+        // Get camera stream
         console.log('Requesting camera access...');
         const constraints = {
             video: { 
-                width: { ideal: 640, max: 1280 },
-                height: { ideal: 480, max: 720 },
-                facingMode: 'user',
-                frameRate: { ideal: 30, min: 15 }
+                width: { ideal: 640 }, 
+                height: { ideal: 480 }, 
+                facingMode: 'user' 
             },
             audio: false
         };
@@ -446,22 +450,23 @@ async function initializeAndStartCamera() {
         videoElement.srcObject = mediaStream;
         
         // Wait for video to be ready
+        console.log('Waiting for video to be ready...');
         await waitForVideoReady();
         
-        // Set canvas size to match video
+        // Set canvas size
         overlayCanvas.width = videoElement.videoWidth;
         overlayCanvas.height = videoElement.videoHeight;
-        console.log(`Canvas size: ${overlayCanvas.width}x${overlayCanvas.height}`);
+        console.log(`Canvas size set to: ${overlayCanvas.width}x${overlayCanvas.height}`);
         
-        // Create and start camera with requestAnimationFrame for smoothness
+        // Create and start camera
         console.log('Creating MediaPipe Camera...');
         camera = new window.Camera(videoElement, {
             onFrame: async () => {
-                if (pose && videoElement.readyState >= 2) {
+                if (pose && videoElement.videoWidth > 0) {
                     try {
                         await pose.send({ image: videoElement });
                     } catch (error) {
-                        console.error('Error sending frame to pose:', error);
+                        console.error('Frame processing error:', error);
                     }
                 }
             },
@@ -471,60 +476,30 @@ async function initializeAndStartCamera() {
         
         await camera.start();
         console.log('Camera started successfully');
-        updateStatus('Ready - Pose tracking active');
+        updateStatus('Ready - Move into frame!');
         
         isInitialized = true;
         
-        // Start FPS counter
-        startFPSCounter();
-        
     } catch (error) {
         console.error('Camera initialization error:', error);
-        updateStatus('Error: ' + error.message);
+        updateStatus('Camera error: ' + error.message);
         
         if (error.name === 'NotAllowedError') {
-            alert('Camera access denied. Please allow camera access to use the exercise tracker.');
+            alert('Camera access denied. Please allow camera access.');
         } else if (error.name === 'NotFoundError') {
             alert('No camera found. Please connect a camera.');
         } else {
-            alert('Failed to start camera. Error: ' + error.message);
+            alert('Failed to start camera. Please refresh the page and try again.');
         }
         
+        // Go back to selection page on error
         setTimeout(() => {
             goToSelectionPage();
-        }, 2000);
+        }, 1000);
         
     } finally {
         isCameraStarting = false;
     }
-}
-
-function cleanupCamera() {
-    // Stop camera processing
-    if (camera) {
-        try {
-            camera.stop();
-        } catch (error) {
-            console.warn('Error stopping camera:', error);
-        }
-        camera = null;
-    }
-    
-    // Stop media stream
-    if (mediaStream) {
-        try {
-            mediaStream.getTracks().forEach(track => {
-                track.stop();
-            });
-        } catch (error) {
-            console.warn('Error stopping media stream:', error);
-        }
-        mediaStream = null;
-    }
-    
-    // Clear video source
-    videoElement.srcObject = null;
-    videoElement.src = '';
 }
 
 async function waitForVideoReady() {
@@ -645,31 +620,23 @@ function calculateConfidence(results) {
 }
 
 function drawSkeleton(results) {
-    if (!results || !results.poseLandmarks || !overlayCanvas || !canvasCtx) {
+    if (!results || !results.poseLandmarks) {
         return;
     }
     
     const videoWidth = overlayCanvas.width;
     const videoHeight = overlayCanvas.height;
     
-    // Clear canvas
-    clearCanvas();
+    // Draw all connections first
+    drawConnections(results.poseLandmarks, videoWidth, videoHeight);
     
-    // Draw connections first (skeleton lines)
-    if (results.poseLandmarks) {
-        drawConnections(results.poseLandmarks, videoWidth, videoHeight);
-    }
-    
-    // Draw landmarks on top
-    if (results.poseLandmarks) {
-        drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
-    }
+    // Draw all landmarks on top
+    drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
     
     // Draw arm angles
-    if (results.poseLandmarks) {
-        drawArmAngles(results.poseLandmarks, videoWidth, videoHeight);
-    }
+    drawArmAngles(results.poseLandmarks, videoWidth, videoHeight);
 }
+
 function drawConnections(landmarks, width, height) {
     if (!landmarks) return;
     
