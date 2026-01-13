@@ -219,14 +219,12 @@ function goToDetectionPage(exerciseType) {
     
     // Reset counters for new exercise
     resetAll();
-    
-    // Reset exercise-specific states
     resetExerciseSpecificStates();
     
-    // Show permission prompt immediately
+    // Show permission prompt
     showPermissionPrompt();
     
-    // Start camera after a short delay
+    // Start camera
     setTimeout(() => {
         startCamera();
     }, 300);
@@ -235,7 +233,7 @@ function goToDetectionPage(exerciseType) {
 function goToSelectionPage() {
     console.log('Going back to selection page');
     
-    // Stop camera and clean up
+    // Stop camera properly
     stopCamera();
     
     // Switch pages
@@ -246,234 +244,118 @@ function goToSelectionPage() {
     resetAll();
 }
 
-function showPermissionPrompt() {
-    if (permissionPrompt) {
-        permissionPrompt.style.display = 'flex';
+// ==================== UPDATED STOP CAMERA FUNCTION ====================
+
+function stopCamera() {
+    // Stop MediaPipe camera
+    if (camera) {
+        camera.stop();
+        camera = null;
     }
-    updateStatus('Waiting for camera permission...');
-}
-
-function hidePermissionPrompt() {
-    if (permissionPrompt) {
-        permissionPrompt.style.display = 'none';
-    }
-}
-
-// ==================== RESET FUNCTION ====================
-
-function resetAll() {
-    leftArmCounter = 0;
-    rightArmCounter = 0;
-    totalRepsCounter = 0;
-    leftStageState = null;
-    rightStageState = null;
-    repInProgress = false;
-
-    updateLeftCounter();
-    updateRightCounter();
-    updateTotalReps();
-    updateTotalRepsDisplay();
     
-    // Reset to exercise-specific default colors
-    const config = exerciseConfig[selectedExercise];
-    updateLeftStage('--', config.readyColor);
-    updateRightStage('--', config.readyColor);
-    updateLeftStageProgress(0);
-    updateRightStageProgress(0);
+    // Stop media stream tracks
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => {
+            track.stop();
+        });
+        mediaStream = null;
+    }
+    
+    // Close MediaPipe pose
+    if (pose) {
+        pose.close();
+        pose = null;
+    }
+    
+    // Clear video source
+    videoElement.srcObject = null;
+    
+    // Clear canvas
     clearCanvas();
     
-    updateTitleAngles();
-
-    // Visual feedback
-    totalRepsDisplay.style.color = '#EF476F';
-    setTimeout(() => {
-        totalRepsDisplay.style.color = '#FFFFFF';
-    }, 300);
-    
-    updateStatus('Ready - Begin your exercise!');
+    console.log('Camera stopped');
 }
 
-// ==================== CAMERA MANAGEMENT ====================
+// ==================== UPDATED START CAMERA FUNCTION ====================
 
 async function startCamera() {
-    if (isCameraStarting) {
-        console.log('Camera is already starting...');
-        return;
-    }
-    
+    if (isCameraStarting) return;
     isCameraStarting = true;
     
     try {
-        updateStatus('Requesting camera access...');
+        updateStatus('Starting camera...');
         
-        // Clean up any existing camera
-        stopCamera();
+        // First stop any existing camera
+        if (mediaStream || camera || pose) {
+            stopCamera();
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
         
-        // Request camera permissions
+        // Get fresh camera stream
         const constraints = {
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: 'user',
-                frameRate: { ideal: 30 }
-            },
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
             audio: false
         };
-
-        console.log('Requesting camera permissions...');
         
-        // This will trigger the browser's permission dialog
         mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
         
         if (!mediaStream) {
-            throw new Error('Failed to get media stream');
+            throw new Error('No media stream');
         }
         
-        console.log('Camera access granted!');
         hidePermissionPrompt();
-        
-        // Set the video stream
         videoElement.srcObject = mediaStream;
-        videoElement.muted = true;
-        videoElement.playsInline = true;
         
-        // Wait for video to be ready
-        await waitForVideoReady();
+        // Wait for video to load
+        await new Promise((resolve) => {
+            videoElement.onloadedmetadata = resolve;
+            setTimeout(resolve, 1000);
+        });
         
         // Set canvas size
-        overlayCanvas.width = videoElement.videoWidth || 640;
-        overlayCanvas.height = videoElement.videoHeight || 480;
+        overlayCanvas.width = videoElement.videoWidth;
+        overlayCanvas.height = videoElement.videoHeight;
         
-        console.log(`Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
-        
-        // Initialize MediaPipe
+        // REINITIALIZE MediaPipe (crucial!)
         await initializeMediaPipe();
         
         if (!pose) {
-            throw new Error('Failed to initialize pose detection');
+            throw new Error('Pose detection failed');
         }
         
-        // Start camera processing with MediaPipe
+        // Start camera processing
         camera = new window.Camera(videoElement, {
             onFrame: async () => {
                 if (pose) {
-                    try {
-                        await pose.send({ image: videoElement });
-                    } catch (error) {
-                        console.error('Pose detection error:', error);
-                    }
+                    await pose.send({ image: videoElement });
                 }
             },
-            width: videoElement.videoWidth || 640,
-            height: videoElement.videoHeight || 480
+            width: videoElement.videoWidth,
+            height: videoElement.videoHeight
         });
         
         await camera.start();
         updateStatus('Ready - Move into frame!');
         
-        // Start FPS counter
-        startFPSCounter();
-        
-        console.log('Camera and MediaPipe started successfully');
-        
     } catch (error) {
         console.error('Camera error:', error);
-        
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-            updateStatus('Camera access denied');
-            showPermissionPrompt();
-            alert('⚠️ Camera access is required for exercise tracking.\n\nPlease click "Allow" when prompted for camera permissions.');
-            
-        } else if (error.name === 'NotFoundError') {
-            updateStatus('No camera found');
-            alert('No camera found on your device. Please connect a camera and try again.');
-        } else {
-            updateStatus('Error: ' + error.message);
-            alert('Failed to start camera: ' + error.message);
-        }
-        
-        // Go back to selection page after error
-        setTimeout(() => {
-            goToSelectionPage();
-        }, 2000);
+        updateStatus('Camera error: ' + error.message);
     } finally {
         isCameraStarting = false;
     }
 }
 
-function stopCamera() {
-    if (camera) {
-        camera.stop();
-        camera = null;
-    }
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-    }
-    if (pose) {
-        pose.close();
-        pose = null;
-    }
-}
-
-function waitForVideoReady() {
-    return new Promise((resolve, reject) => {
-        if (videoElement.readyState >= 2) {
-            console.log('Video already ready');
-            resolve();
-            return;
-        }
-        
-        const onLoaded = () => {
-            console.log('Video metadata loaded');
-            videoElement.removeEventListener('loadedmetadata', onLoaded);
-            videoElement.removeEventListener('error', onError);
-            resolve();
-        };
-        
-        const onError = (error) => {
-            console.error('Video error:', error);
-            videoElement.removeEventListener('loadedmetadata', onLoaded);
-            videoElement.removeEventListener('error', onError);
-            reject(error);
-        };
-        
-        videoElement.addEventListener('loadedmetadata', onLoaded);
-        videoElement.addEventListener('error', onError);
-        
-        // Try to play the video
-        videoElement.play().catch(error => {
-            console.warn('Auto-play prevented:', error);
-        });
-        
-        // Fallback timeout
-        setTimeout(() => {
-            if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
-                console.log('Video ready (fallback)');
-                resolve();
-            } else {
-                console.warn('Video not fully loaded, but continuing');
-                resolve();
-            }
-        }, 3000);
-    });
-}
-
-// ==================== MEDIAPIPE INITIALIZATION ====================
+// ==================== UPDATED MEDIAPIPE INIT ====================
 
 async function initializeMediaPipe() {
     try {
-        updateStatus('Loading pose detection...');
-        
-        // Load MediaPipe scripts if not already loaded
-        if (typeof window.Pose === 'undefined' || typeof window.Camera === 'undefined') {
-            console.log('Loading MediaPipe scripts...');
+        // Load scripts if needed
+        if (typeof window.Pose === 'undefined') {
             await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');
             await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
-            console.log('MediaPipe scripts loaded');
         }
         
-        // Initialize MediaPipe Pose
+        // Create NEW pose instance
         pose = new window.Pose({
             locateFile: (file) => {
                 return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
@@ -483,21 +365,16 @@ async function initializeMediaPipe() {
         pose.setOptions({
             modelComplexity: 1,
             smoothLandmarks: true,
-            enableSegmentation: false,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
         
+        // Reattach the onResults callback (important!)
         pose.onResults(onPoseResults);
         
-        console.log('MediaPipe Pose initialized successfully');
-        updateStatus('Pose detection ready');
-        return true;
-        
     } catch (error) {
-        console.error('MediaPipe initialization error:', error);
-        updateStatus('Pose detection failed');
-        return false;
+        console.error('MediaPipe init error:', error);
+        pose = null;
     }
 }
 
