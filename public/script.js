@@ -92,6 +92,7 @@ let repInProgress = false;
 let selectedExercise = 'bicep_curl';
 let isCameraStarting = false;
 let mediaPipeLoaded = false;
+let isSwitchingExercise = false;
 
 // Colors for correct left/right mapping
 const COLORS = {
@@ -199,12 +200,12 @@ async function goToDetectionPage(exerciseType) {
             return;
         }
         
-        // Update UI
-        currentExerciseName.textContent = config.name;
-        
         // Switch pages
         selectionPage.classList.remove('active');
         detectionPage.classList.add('active');
+        
+        // Update UI
+        currentExerciseName.textContent = config.name;
         
         // Reset counters for new exercise
         resetAll();
@@ -213,10 +214,17 @@ async function goToDetectionPage(exerciseType) {
         // Show permission prompt
         showPermissionPrompt();
         
-        // Start camera with a slight delay
-        setTimeout(() => {
-            initializeAndStartCamera();
-        }, 100);
+        // Reset MediaPipe loaded flag to force re-initialization
+        mediaPipeLoaded = false;
+        
+        // Stop any existing camera
+        await stopCamera();
+        
+        // Add a small delay to ensure DOM updates
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Start fresh camera initialization
+        await initializeAndStartCamera();
     } catch (error) {
         console.error('Error switching to detection page:', error);
         alert('Error switching to detection page. Please try again.');
@@ -229,6 +237,12 @@ function goToSelectionPage() {
     
     // Stop camera properly
     stopCamera();
+    
+    // Clear canvas
+    clearCanvas();
+    
+    // Reset landmarks
+    landmarks = null;
     
     // Switch pages
     detectionPage.classList.remove('active');
@@ -250,13 +264,20 @@ function hidePermissionPrompt() {
 // ==================== MEDIAPIPE LOADING ====================
 
 async function loadMediaPipeDependencies() {
-    if (mediaPipeLoaded) {
-        console.log('MediaPipe already loaded');
-        return true;
-    }
-    
+    // Always re-load MediaPipe when switching exercises
     try {
         console.log('Loading MediaPipe dependencies...');
+        
+        // Remove existing scripts to force reload
+        const existingScripts = document.querySelectorAll('script[id^="mediapipe-"]');
+        existingScripts.forEach(script => {
+            if (script.parentNode) {
+                script.parentNode.removeChild(script);
+            }
+        });
+        
+        // Reset loaded flag
+        mediaPipeLoaded = false;
         
         // Load MediaPipe Pose
         await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js', 'mediapipe-pose');
@@ -278,13 +299,6 @@ async function loadMediaPipeDependencies() {
 
 function loadScript(src, id) {
     return new Promise((resolve, reject) => {
-        // Check if script is already loaded
-        if (document.querySelector(`script[src="${src}"]`)) {
-            console.log(`Script already loaded: ${src}`);
-            resolve();
-            return;
-        }
-        
         const script = document.createElement('script');
         script.src = src;
         script.id = id;
@@ -340,20 +354,17 @@ async function initializeAndStartCamera() {
     
     try {
         updateStatus('Initializing camera...');
-        console.log('Starting camera initialization...');
+        console.log('Starting fresh camera initialization for exercise:', selectedExercise);
         
-        // First, load MediaPipe dependencies
+        // First, load MediaPipe dependencies (force reload)
         const mediaPipeLoaded = await loadMediaPipeDependencies();
         if (!mediaPipeLoaded) {
             throw new Error('Failed to load MediaPipe dependencies');
         }
         
-        // Stop any existing camera
-        if (mediaStream || camera || pose) {
-            console.log('Stopping existing camera...');
-            stopCamera();
-            await new Promise(resolve => setTimeout(resolve, 300));
-        }
+        // Clear any previous state
+        clearCanvas();
+        landmarks = null;
         
         // Get camera stream
         console.log('Requesting camera access...');
@@ -504,7 +515,7 @@ async function initializeMediaPipe() {
     }
 }
 
-function stopCamera() {
+async function stopCamera() {
     console.log('Stopping camera...');
     
     // Stop camera processing
@@ -547,6 +558,9 @@ function stopCamera() {
     
     // Reset landmarks
     landmarks = null;
+    
+    // Reset MediaPipe loaded flag
+    mediaPipeLoaded = false;
     
     console.log('Camera stopped completely');
 }
@@ -859,7 +873,7 @@ function calculateArmAngles(landmarks) {
     // Calculate right arm angle
     const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
-    const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
+    const rightWrist = landmarks[LANDMARK_INDices.RIGHT_WRIST];
     
     // Update left arm
     if (leftShoulder && leftElbow && leftWrist &&
