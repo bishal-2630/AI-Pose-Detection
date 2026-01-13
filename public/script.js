@@ -35,12 +35,12 @@ const backBtn = document.getElementById('backBtn');
 const currentExerciseName = document.getElementById('currentExerciseName');
 const permissionPrompt = document.getElementById('permissionPrompt');
 
-// Exercise configurations
+// Exercise-specific configurations
 const exerciseConfig = {
     bicep_curl: {
         name: 'Bicep Curls',
-        angleUp: 40,
-        angleDown: 160,
+        angleUp: 40,    // Angle threshold for "up" position (arm bent)
+        angleDown: 160, // Angle threshold for "down" position (arm extended)
         upLabel: 'UP',
         downLabel: 'DOWN',
         upColor: '#EF476F',
@@ -50,8 +50,8 @@ const exerciseConfig = {
     },
     pull_up: {
         name: 'Pull-ups',
-        angleUp: 30,
-        angleDown: 120,
+        angleUp: 30,    // Different thresholds for pull-ups (chin above bar)
+        angleDown: 120, // Different thresholds for pull-ups (arms extended)
         upLabel: 'CHIN UP',
         downLabel: 'EXTENDED',
         upColor: '#06D6A0',
@@ -61,8 +61,8 @@ const exerciseConfig = {
     },
     push_up: {
         name: 'Push-ups',
-        angleUp: 60,
-        angleDown: 150,
+        angleUp: 60,    // Different thresholds for push-ups (chest down)
+        angleDown: 150, // Different thresholds for push-ups (arms extended)
         upLabel: 'DOWN',
         downLabel: 'UP',
         upColor: '#EF476F',
@@ -82,6 +82,7 @@ let leftArmAngle = 0;
 let rightArmAngle = 0;
 let useAPI = true;
 let pose = null;
+let camera = null;
 let mediaStream = null;
 let frameCount = 0;
 let fps = 0;
@@ -90,19 +91,18 @@ let detectionConfidence = 0;
 let repInProgress = false;
 let selectedExercise = 'bicep_curl';
 let isCameraStarting = false;
-let animationId = null;
 
-// Colors
+// Colors for correct left/right mapping (person's perspective)
 const COLORS = {
-    leftSide: '#FF6B6B',
-    rightSide: '#4CC9F0',
-    center: '#FFD166',
-    connections: '#118AB2',
-    angleArc: '#06D6A0',
-    activeArm: '#EF476F'
+    leftSide: '#FF6B6B',      // Red for left side (person's left)
+    rightSide: '#4CC9F0',     // Blue for right side (person's right)
+    center: '#FFD166',        // Yellow for center points
+    connections: '#118AB2',   // Blue for skeleton lines
+    angleArc: '#06D6A0',      // Green for angle arcs
+    activeArm: '#EF476F'      // Pink for active arm highlights
 };
 
-// MediaPipe landmark indices
+// MediaPipe landmark indices (person's perspective) - FULL SET
 const LANDMARK_INDICES = {
     NOSE: 0,
     LEFT_EYE_INNER: 1,
@@ -139,7 +139,7 @@ const LANDMARK_INDICES = {
     RIGHT_FOOT_INDEX: 32
 };
 
-// Skeleton connections
+// Full skeleton connections as before
 const SKELETON_CONNECTIONS = [
     // Face connections
     [LANDMARK_INDICES.NOSE, LANDMARK_INDICES.LEFT_EYE_INNER],
@@ -165,7 +165,7 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_THUMB],
     [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_INDEX],
     [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_PINKY],
-    [LANDMARK_INDices.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_THUMB],
+    [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_THUMB],
     [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_INDEX],
     [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_PINKY],
 
@@ -181,9 +181,10 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.RIGHT_HEEL, LANDMARK_INDICES.RIGHT_FOOT_INDEX]
 ];
 
-// Helper functions
+// ==================== HELPER FUNCTIONS ====================
+
 function flipX(x, width) {
-    return width - x * width;
+    return width - x * width; // Mirror effect
 }
 
 function flipY(y, height) {
@@ -196,7 +197,8 @@ function distance(point1, point2) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-// Page navigation
+// ==================== PAGE NAVIGATION ====================
+
 function goToDetectionPage(exerciseType) {
     console.log(`Starting exercise: ${exerciseType}`);
     
@@ -208,12 +210,20 @@ function goToDetectionPage(exerciseType) {
         return;
     }
     
+    // Update UI
     currentExerciseName.textContent = config.name;
+    
+    // Switch pages
     selectionPage.classList.remove('active');
     detectionPage.classList.add('active');
+    
+    // Reset counters for new exercise
     resetAll();
+    
+    // Show permission prompt immediately
     showPermissionPrompt();
     
+    // Start camera after a short delay
     setTimeout(() => {
         startCamera();
     }, 300);
@@ -221,9 +231,15 @@ function goToDetectionPage(exerciseType) {
 
 function goToSelectionPage() {
     console.log('Going back to selection page');
+    
+    // Stop camera and clean up
     stopCamera();
+    
+    // Switch pages
     detectionPage.classList.remove('active');
     selectionPage.classList.add('active');
+    
+    // Reset all counters
     resetAll();
 }
 
@@ -240,7 +256,8 @@ function hidePermissionPrompt() {
     }
 }
 
-// Reset function
+// ==================== RESET FUNCTION ====================
+
 function resetAll() {
     leftArmCounter = 0;
     rightArmCounter = 0;
@@ -254,14 +271,17 @@ function resetAll() {
     updateTotalReps();
     updateTotalRepsDisplay();
     
+    // Reset to exercise-specific default colors
     const config = exerciseConfig[selectedExercise];
     updateLeftStage('--', config.readyColor);
     updateRightStage('--', config.readyColor);
     updateLeftStageProgress(0);
     updateRightStageProgress(0);
     clearCanvas();
+    
     updateTitleAngles();
 
+    // Visual feedback
     totalRepsDisplay.style.color = '#EF476F';
     setTimeout(() => {
         totalRepsDisplay.style.color = '#FFFFFF';
@@ -270,7 +290,8 @@ function resetAll() {
     updateStatus('Ready - Begin your exercise!');
 }
 
-// Camera management
+// ==================== CAMERA MANAGEMENT ====================
+
 async function startCamera() {
     if (isCameraStarting) {
         console.log('Camera is already starting...');
@@ -281,8 +302,11 @@ async function startCamera() {
     
     try {
         updateStatus('Requesting camera access...');
+        
+        // Clean up any existing camera
         stopCamera();
         
+        // Request camera permissions
         const constraints = {
             video: {
                 width: { ideal: 640 },
@@ -294,6 +318,8 @@ async function startCamera() {
         };
 
         console.log('Requesting camera permissions...');
+        
+        // This will trigger the browser's permission dialog
         mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
         
         if (!mediaStream) {
@@ -303,24 +329,48 @@ async function startCamera() {
         console.log('Camera access granted!');
         hidePermissionPrompt();
         
+        // Set the video stream
         videoElement.srcObject = mediaStream;
         videoElement.muted = true;
         videoElement.playsInline = true;
         
+        // Wait for video to be ready
         await waitForVideoReady();
+        
+        // Set canvas size
         overlayCanvas.width = videoElement.videoWidth || 640;
         overlayCanvas.height = videoElement.videoHeight || 480;
         
         console.log(`Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
+        
+        // Initialize MediaPipe
         await initializeMediaPipe();
         
         if (!pose) {
             throw new Error('Failed to initialize pose detection');
         }
         
-        startPoseDetection();
+        // Start camera processing with MediaPipe
+        camera = new window.Camera(videoElement, {
+            onFrame: async () => {
+                if (pose) {
+                    try {
+                        await pose.send({ image: videoElement });
+                    } catch (error) {
+                        console.error('Pose detection error:', error);
+                    }
+                }
+            },
+            width: videoElement.videoWidth || 640,
+            height: videoElement.videoHeight || 480
+        });
+        
+        await camera.start();
         updateStatus('Ready - Move into frame!');
+        
+        // Start FPS counter
         startFPSCounter();
+        
         console.log('Camera and MediaPipe started successfully');
         
     } catch (error) {
@@ -330,6 +380,7 @@ async function startCamera() {
             updateStatus('Camera access denied');
             showPermissionPrompt();
             alert('⚠️ Camera access is required for exercise tracking.\n\nPlease click "Allow" when prompted for camera permissions.');
+            
         } else if (error.name === 'NotFoundError') {
             updateStatus('No camera found');
             alert('No camera found on your device. Please connect a camera and try again.');
@@ -338,6 +389,7 @@ async function startCamera() {
             alert('Failed to start camera: ' + error.message);
         }
         
+        // Go back to selection page after error
         setTimeout(() => {
             goToSelectionPage();
         }, 2000);
@@ -346,33 +398,11 @@ async function startCamera() {
     }
 }
 
-function startPoseDetection() {
-    if (animationId) {
-        cancelAnimationFrame(animationId);
-    }
-    
-    function detectPose() {
-        if (!pose || !videoElement.videoWidth) return;
-        
-        try {
-            pose.send({ image: videoElement });
-            frameCount++;
-        } catch (error) {
-            console.error('Pose detection error:', error);
-        }
-        
-        animationId = requestAnimationFrame(detectPose);
-    }
-    
-    detectPose();
-}
-
 function stopCamera() {
-    if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
+    if (camera) {
+        camera.stop();
+        camera = null;
     }
-    
     if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
         mediaStream = null;
@@ -381,17 +411,18 @@ function stopCamera() {
         pose.close();
         pose = null;
     }
-    videoElement.srcObject = null;
 }
 
 function waitForVideoReady() {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         if (videoElement.readyState >= 2) {
+            console.log('Video already ready');
             resolve();
             return;
         }
         
         const onLoaded = () => {
+            console.log('Video metadata loaded');
             videoElement.removeEventListener('loadedmetadata', onLoaded);
             videoElement.removeEventListener('error', onError);
             resolve();
@@ -401,30 +432,47 @@ function waitForVideoReady() {
             console.error('Video error:', error);
             videoElement.removeEventListener('loadedmetadata', onLoaded);
             videoElement.removeEventListener('error', onError);
-            resolve();
+            reject(error);
         };
         
         videoElement.addEventListener('loadedmetadata', onLoaded);
         videoElement.addEventListener('error', onError);
         
+        // Try to play the video
+        videoElement.play().catch(error => {
+            console.warn('Auto-play prevented:', error);
+        });
+        
+        // Fallback timeout
         setTimeout(() => {
-            resolve();
-        }, 1000);
+            if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+                console.log('Video ready (fallback)');
+                resolve();
+            } else {
+                console.warn('Video not fully loaded, but continuing');
+                resolve();
+            }
+        }, 3000);
     });
 }
 
-// MediaPipe initialization
+// ==================== MEDIAPIPE INITIALIZATION ====================
+
 async function initializeMediaPipe() {
     try {
         updateStatus('Loading pose detection...');
         
-        // Load MediaPipe Pose library if not already loaded
-        await loadMediaPipeScripts();
+        // Load MediaPipe scripts if not already loaded
+        if (typeof window.Pose === 'undefined' || typeof window.Camera === 'undefined') {
+            console.log('Loading MediaPipe scripts...');
+            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');
+            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
+            console.log('MediaPipe scripts loaded');
+        }
         
-        // Initialize Pose
+        // Initialize MediaPipe Pose
         pose = new window.Pose({
             locateFile: (file) => {
-                console.log('MediaPipe looking for file:', file);
                 return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
             }
         });
@@ -450,52 +498,30 @@ async function initializeMediaPipe() {
     }
 }
 
-async function loadMediaPipeScripts() {
+function loadScript(src) {
     return new Promise((resolve, reject) => {
-        // Check if MediaPipe is already loaded
-        if (window.Pose) {
-            console.log('MediaPipe already loaded');
+        if (document.querySelector(`script[src="${src}"]`)) {
+            console.log(`Script already loaded: ${src}`);
             resolve();
             return;
         }
         
-        // Load the MediaPipe Pose script
         const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
-        script.crossOrigin = 'anonymous';
-        script.type = 'module';
-        
+        script.src = src;
         script.onload = () => {
-            console.log('MediaPipe Pose script loaded');
-            
-            // Wait a bit for Pose class to be available
-            const checkInterval = setInterval(() => {
-                if (window.Pose) {
-                    clearInterval(checkInterval);
-                    console.log('MediaPipe Pose class available');
-                    resolve();
-                }
-            }, 100);
-            
-            // Timeout after 5 seconds
-            setTimeout(() => {
-                clearInterval(checkInterval);
-                if (!window.Pose) {
-                    reject(new Error('MediaPipe Pose class not available after loading script'));
-                }
-            }, 5000);
+            console.log(`Script loaded: ${src}`);
+            resolve();
         };
-        
         script.onerror = (error) => {
-            console.error('Failed to load MediaPipe:', error);
-            reject(new Error('Failed to load MediaPipe Pose script'));
+            console.error(`Failed to load script: ${src}`, error);
+            reject(new Error(`Failed to load script: ${src}`));
         };
-        
         document.head.appendChild(script);
     });
 }
 
-// Pose detection results
+// ==================== POSE DETECTION & VISUALIZATION ====================
+
 function onPoseResults(results) {
     if (!results) return;
     
@@ -505,15 +531,20 @@ function onPoseResults(results) {
         landmarks = results.poseLandmarks;
         detectionConfidence = calculateConfidence(results);
 
+        // Count detected landmarks
         const detectedCount = countDetectedLandmarks(landmarks);
         updateLandmarkStats(detectedCount);
 
+        // Clear and draw skeleton with correct left/right mapping
         clearCanvas();
         drawSkeleton(results);
+
+        // Calculate and display both arm angles
         calculateArmAngles(landmarks);
 
         updateStatus(`${detectedCount} points detected`);
         
+        // Update latency
         const latency = Math.round(performance.now() - startTime);
         updateLatency(latency);
     } else {
@@ -522,44 +553,34 @@ function onPoseResults(results) {
         updateLandmarkStats(0);
         updateStatus('Move into frame - No pose detected');
     }
+    
+    frameCount++;
 }
 
 function countDetectedLandmarks(landmarks) {
-    if (!landmarks) return 0;
-    let count = 0;
-    for (let i = 0; i < landmarks.length; i++) {
-        if (landmarks[i] && landmarks[i].visibility > 0.1) {
-            count++;
-        }
-    }
-    return count;
+    return landmarks.filter(landmark =>
+        landmark && landmark.visibility && landmark.visibility > 0.1
+    ).length;
 }
 
 function calculateConfidence(results) {
     if (!results.poseWorldLandmarks) return 0;
-    let sum = 0;
-    for (let i = 0; i < results.poseWorldLandmarks.length; i++) {
-        const landmark = results.poseWorldLandmarks[i];
-        if (landmark && landmark.visibility) {
-            sum += landmark.visibility;
-        }
-    }
+    const sum = results.poseWorldLandmarks.reduce((acc, landmark) =>
+        acc + (landmark.visibility || 0), 0
+    );
     return Math.round((sum / results.poseWorldLandmarks.length) * 100);
 }
 
-// Drawing functions
 function drawSkeleton(results) {
-    if (!results.poseLandmarks) return;
-    
     const videoWidth = overlayCanvas.width;
     const videoHeight = overlayCanvas.height;
 
-    // Draw connections first
+    // Draw all connections first
     drawConnections(results.poseLandmarks, videoWidth, videoHeight);
-    
-    // Then draw landmarks on top
+
+    // Draw all landmarks on top
     drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
-    
+
     // Draw arm angles
     drawArmAngles(results.poseLandmarks, videoWidth, videoHeight);
 }
@@ -567,7 +588,6 @@ function drawSkeleton(results) {
 function drawConnections(landmarks, width, height) {
     if (!landmarks) return;
     
-    canvasCtx.save();
     canvasCtx.lineWidth = 3;
     canvasCtx.lineCap = 'round';
 
@@ -579,78 +599,111 @@ function drawConnections(landmarks, width, height) {
             // Determine color based on side (person's perspective)
             let color = COLORS.connections;
 
-            // Left side connections (person's left)
-            if (startIdx <= 10 || startIdx % 2 === 1) {
+            // Person's left side connections
+            if (startIdx === LANDMARK_INDICES.LEFT_SHOULDER || 
+                startIdx === LANDMARK_INDICES.LEFT_ELBOW ||
+                startIdx === LANDMARK_INDICES.LEFT_WRIST ||
+                startIdx === LANDMARK_INDICES.LEFT_HIP ||
+                startIdx === LANDMARK_INDICES.LEFT_KNEE ||
+                startIdx === LANDMARK_INDICES.LEFT_ANKLE ||
+                endIdx === LANDMARK_INDICES.LEFT_SHOULDER ||
+                endIdx === LANDMARK_INDICES.LEFT_ELBOW ||
+                endIdx === LANDMARK_INDICES.LEFT_WRIST ||
+                endIdx === LANDMARK_INDICES.LEFT_HIP ||
+                endIdx === LANDMARK_INDICES.LEFT_KNEE ||
+                endIdx === LANDMARK_INDICES.LEFT_ANKLE) {
                 color = COLORS.leftSide;
             }
-            // Right side connections (person's right)
-            else if (startIdx % 2 === 0) {
+            // Person's right side connections
+            else if (startIdx === LANDMARK_INDICES.RIGHT_SHOULDER ||
+                     startIdx === LANDMARK_INDICES.RIGHT_ELBOW ||
+                     startIdx === LANDMARK_INDICES.RIGHT_WRIST ||
+                     startIdx === LANDMARK_INDICES.RIGHT_HIP ||
+                     startIdx === LANDMARK_INDICES.RIGHT_KNEE ||
+                     startIdx === LANDMARK_INDICES.RIGHT_ANKLE ||
+                     endIdx === LANDMARK_INDICES.RIGHT_SHOULDER ||
+                     endIdx === LANDMARK_INDICES.RIGHT_ELBOW ||
+                     endIdx === LANDMARK_INDICES.RIGHT_WRIST ||
+                     endIdx === LANDMARK_INDICES.RIGHT_HIP ||
+                     endIdx === LANDMARK_INDICES.RIGHT_KNEE ||
+                     endIdx === LANDMARK_INDICES.RIGHT_ANKLE) {
                 color = COLORS.rightSide;
             }
 
-            const startX = flipX(start.x, width);
-            const startY = flipY(start.y, height);
-            const endX = flipX(end.x, width);
-            const endY = flipY(end.y, height);
-
-            canvasCtx.beginPath();
-            canvasCtx.moveTo(startX, startY);
-            canvasCtx.lineTo(endX, endY);
-            canvasCtx.strokeStyle = color;
-            canvasCtx.stroke();
+            drawLine(start, end, width, height, color);
         }
     });
-    
-    canvasCtx.restore();
+}
+
+function drawLine(start, end, width, height, color) {
+    // Convert normalized coordinates to canvas coordinates with mirroring
+    const startX = flipX(start.x, width);
+    const startY = flipY(start.y, height);
+    const endX = flipX(end.x, width);
+    const endY = flipY(end.y, height);
+
+    canvasCtx.beginPath();
+    canvasCtx.moveTo(startX, startY);
+    canvasCtx.lineTo(endX, endY);
+    canvasCtx.strokeStyle = color;
+    canvasCtx.lineWidth = 3;
+    canvasCtx.lineCap = 'round';
+    canvasCtx.stroke();
 }
 
 function drawLandmarks(landmarks, width, height) {
     if (!landmarks) return;
     
-    canvasCtx.save();
-    
     landmarks.forEach((landmark, index) => {
         if (landmark && landmark.visibility > 0.1) {
+            // Determine color based on side and importance
             let color, size;
 
-            // Determine color based on index
             if (index <= 10) {
                 // Face landmarks
-                if (index <= 3 || index === 7 || index === 9) {
-                    color = COLORS.leftSide;
-                } else {
-                    color = COLORS.rightSide;
-                }
+                color = index <= 3 || index === 7 || index === 9 ? 
+                        COLORS.leftSide : COLORS.rightSide;
                 size = 5;
             } else if (index <= 22) {
                 // Upper body
-                if (index % 2 === 1) { // Odd indices are left side
+                if (index === LANDMARK_INDICES.LEFT_SHOULDER ||
+                    index === LANDMARK_INDICES.LEFT_ELBOW ||
+                    index === LANDMARK_INDICES.LEFT_WRIST ||
+                    index === LANDMARK_INDICES.LEFT_PINKY ||
+                    index === LANDMARK_INDICES.LEFT_INDEX ||
+                    index === LANDMARK_INDICES.LEFT_THUMB) {
                     color = COLORS.leftSide;
-                } else { // Even indices are right side
+                    size = 8;
+                } else if (index === LANDMARK_INDICES.RIGHT_SHOULDER ||
+                           index === LANDMARK_INDICES.RIGHT_ELBOW ||
+                           index === LANDMARK_INDICES.RIGHT_WRIST ||
+                           index === LANDMARK_INDICES.RIGHT_PINKY ||
+                           index === LANDMARK_INDICES.RIGHT_INDEX ||
+                           index === LANDMARK_INDICES.RIGHT_THUMB) {
                     color = COLORS.rightSide;
-                }
-                size = 8;
-                
-                // Center landmarks
-                if (index === 0 || index === 11 || index === 12) {
+                    size = 8;
+                } else {
                     color = COLORS.center;
-                    size = index === 0 ? 9 : 10;
+                    size = 6;
                 }
             } else {
                 // Lower body
-                if (index % 2 === 1) {
-                    color = COLORS.leftSide;
-                } else {
-                    color = COLORS.rightSide;
-                }
+                color = index % 2 === 1 ? COLORS.leftSide : COLORS.rightSide;
                 size = 7;
+            }
+
+            if (index === 0) { // Nose
+                color = COLORS.center;
+                size = 9;
+            }
+
+            if (index === 11 || index === 12) { // Shoulders
+                size = 10;
             }
 
             drawPoint(landmark, width, height, color, size, index);
         }
     });
-    
-    canvasCtx.restore();
 }
 
 function drawPoint(landmark, width, height, color, size, index) {
@@ -660,7 +713,7 @@ function drawPoint(landmark, width, height, color, size, index) {
     // Outer glow
     canvasCtx.beginPath();
     canvasCtx.arc(x, y, size * 1.5, 0, 2 * Math.PI);
-    canvasCtx.fillStyle = color + '40'; // 40 = 25% opacity in hex
+    canvasCtx.fillStyle = color + '40';
     canvasCtx.fill();
 
     // Main point
@@ -675,7 +728,7 @@ function drawPoint(landmark, width, height, color, size, index) {
     canvasCtx.fillStyle = '#FFFFFF';
     canvasCtx.fill();
 
-    // Draw index number for debugging
+    // Draw index number for key landmarks (for debugging)
     if ([0, 11, 12, 13, 14, 15, 16].includes(index)) {
         canvasCtx.fillStyle = '#FFFFFF';
         canvasCtx.font = 'bold 11px Arial';
@@ -686,9 +739,7 @@ function drawPoint(landmark, width, height, color, size, index) {
 }
 
 function drawArmAngles(landmarks, width, height) {
-    if (!landmarks) return;
-    
-    // Left arm angle
+    // Draw left arm angle (person's left)
     const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
     const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
     const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
@@ -700,7 +751,7 @@ function drawArmAngles(landmarks, width, height) {
         drawAngleArc(leftShoulder, leftElbow, leftWrist, width, height, COLORS.leftSide, "LEFT");
     }
 
-    // Right arm angle
+    // Draw right arm angle (person's right)
     const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
     const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
@@ -726,19 +777,18 @@ function drawAngleArc(shoulder, elbow, wrist, width, height, color, side) {
     const angle = calculateAngle(shoulder, elbow, wrist);
     const radius = 35;
 
-    // Calculate angles for arc
+    // Calculate arc angles (vectors from elbow to shoulder and wrist)
     const startAngle = Math.atan2(shoulderY - elbowY, shoulderX - elbowX);
     const endAngle = Math.atan2(wristY - elbowY, wristX - elbowX);
 
     // Draw arc
-    canvasCtx.save();
     canvasCtx.beginPath();
     canvasCtx.arc(elbowX, elbowY, radius, startAngle, endAngle);
     canvasCtx.strokeStyle = color;
     canvasCtx.lineWidth = 4;
     canvasCtx.lineCap = 'round';
     canvasCtx.stroke();
-    
+
     // Draw angle text
     canvasCtx.fillStyle = '#FFFFFF';
     canvasCtx.font = 'bold 14px Arial';
@@ -750,23 +800,21 @@ function drawAngleArc(shoulder, elbow, wrist, width, height, color, side) {
     canvasCtx.fillStyle = color;
     canvasCtx.font = 'bold 12px Arial';
     canvasCtx.fillText(side, elbowX, elbowY + radius + 15);
-    canvasCtx.restore();
 }
 
 function clearCanvas() {
     canvasCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 }
 
-// Angle calculation
+// ==================== ARM ANGLE CALCULATION ====================
+
 function calculateArmAngles(landmarks) {
-    if (!landmarks) return;
-    
-    // Left arm
+    // Calculate left arm angle (person's left)
     const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
     const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
     const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
 
-    // Right arm
+    // Calculate right arm angle (person's right)
     const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
     const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
@@ -801,6 +849,8 @@ function calculateArmAngles(landmarks) {
     const leftArmVisible = leftShoulder && leftElbow && leftWrist;
     const rightArmVisible = rightShoulder && rightElbow && rightWrist;
     updateArmVisibility(leftArmVisible, rightArmVisible);
+    
+    // Update title angles
     updateTitleAngles();
 }
 
@@ -819,8 +869,9 @@ function calculateAngle(a, b, c) {
 function countExercise(angle, side) {
     const config = exerciseConfig[selectedExercise];
     
-    // Reset repInProgress when both arms are extended
+    // Reset repInProgress when both arms are extended (exercise-specific thresholds)
     if (selectedExercise === 'bicep_curl') {
+        // For bicep curls: reset when both arms are extended (>160)
         if (side === 'right' && angle > 160 && leftArmAngle > 160) {
             repInProgress = false;
         }
@@ -828,6 +879,7 @@ function countExercise(angle, side) {
             repInProgress = false;
         }
     } else if (selectedExercise === 'pull_up') {
+        // For pull-ups: reset when both arms are extended (>120)
         if (side === 'right' && angle > 120 && leftArmAngle > 120) {
             repInProgress = false;
         }
@@ -835,6 +887,7 @@ function countExercise(angle, side) {
             repInProgress = false;
         }
     } else if (selectedExercise === 'push_up') {
+        // For push-ups: reset when both arms are extended (>150)
         if (side === 'right' && angle > 150 && leftArmAngle > 150) {
             repInProgress = false;
         }
@@ -843,8 +896,9 @@ function countExercise(angle, side) {
         }
     }
     
-    // Bicep curls
+    // EXERCISE-SPECIFIC COUNTING LOGIC
     if (selectedExercise === 'bicep_curl') {
+        // Bicep curl: Count when arm goes from extended (>160) to bent (<40)
         if (side === 'left') {
             if (angle > config.angleDown) {
                 leftStageState = "down";
@@ -893,8 +947,8 @@ function countExercise(angle, side) {
             }
         }
     } 
-    // Pull-ups
     else if (selectedExercise === 'pull_up') {
+        // Pull-up: Count when arm goes from bent (<30) to extended (>120)
         if (side === 'left') {
             if (angle < config.angleUp) {
                 leftStageState = "up";
@@ -943,8 +997,9 @@ function countExercise(angle, side) {
             }
         }
     } 
-    // Push-ups
     else if (selectedExercise === 'push_up') {
+        // Push-up: Count when arm goes from extended (>150) to bent (<60)
+        // IMPORTANT: This is the opposite logic of bicep curls
         if (side === 'left') {
             if (angle > config.angleDown) {
                 leftStageState = "up";
@@ -995,7 +1050,8 @@ function countExercise(angle, side) {
     }
 }
 
-// UI updates
+// ==================== UI UPDATES ====================
+
 function updateTitleAngles() {
     leftAngleTitle.textContent = `${Math.round(leftArmAngle)}°`;
     rightAngleTitle.textContent = `${Math.round(rightArmAngle)}°`;
@@ -1072,23 +1128,17 @@ function updateTotalRepsDisplay() {
 }
 
 function animateLeftRep() {
-    const leftAngleElement = document.querySelector('.left-angle');
-    if (leftAngleElement) {
-        leftAngleElement.classList.add('highlight-active');
-        setTimeout(() => {
-            leftAngleElement.classList.remove('highlight-active');
-        }, 1000);
-    }
+    document.querySelector('.left-angle').classList.add('highlight-active');
+    setTimeout(() => {
+        document.querySelector('.left-angle').classList.remove('highlight-active');
+    }, 1000);
 }
 
 function animateRightRep() {
-    const rightAngleElement = document.querySelector('.right-angle');
-    if (rightAngleElement) {
-        rightAngleElement.classList.add('highlight-active');
-        setTimeout(() => {
-            rightAngleElement.classList.remove('highlight-active');
-        }, 1000);
-    }
+    document.querySelector('.right-angle').classList.add('highlight-active');
+    setTimeout(() => {
+        document.querySelector('.right-angle').classList.remove('highlight-active');
+    }, 1000);
 }
 
 function animateTotalRep() {
@@ -1150,7 +1200,8 @@ function startFPSCounter() {
     }, 1000);
 }
 
-// Event listeners
+// ==================== EVENT LISTENERS ====================
+
 resetBtn.addEventListener('click', resetAll);
 
 leftCounter.addEventListener('click', () => {
@@ -1177,10 +1228,12 @@ window.addEventListener('resize', () => {
     }
 });
 
-// Initialize
+// ==================== INITIALIZATION ====================
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Fitness Tracker initialized');
     
+    // Set up exercise selection
     const exerciseItems = document.querySelectorAll('.exercise-item');
     console.log(`Found ${exerciseItems.length} exercise items`);
     
@@ -1189,28 +1242,40 @@ document.addEventListener('DOMContentLoaded', function() {
             const exercise = this.getAttribute('data-exercise');
             console.log(`Exercise clicked: ${exercise}`);
             
+            // Update selected exercise
             selectedExercise = exercise;
             const config = exerciseConfig[exercise];
             
+            // Update UI
             currentExerciseName.textContent = config.name;
+            
+            // Switch pages
             selectionPage.classList.remove('active');
             detectionPage.classList.add('active');
+            
+            // Reset counters for new exercise
             resetAll();
+            
+            // Show permission prompt immediately
             showPermissionPrompt();
             
+            // Start camera after a short delay
             setTimeout(() => {
                 startCamera();
             }, 300);
         });
     });
     
+    // Set up back button
     if (backBtn) {
         backBtn.addEventListener('click', goToSelectionPage);
     }
     
+    // Initialize with selection page visible
     selectionPage.classList.add('active');
     detectionPage.classList.remove('active');
     
+    // Set video element properties for mobile
     videoElement.setAttribute('playsinline', '');
     videoElement.setAttribute('webkit-playsinline', '');
     videoElement.setAttribute('muted', '');
