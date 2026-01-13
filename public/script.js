@@ -90,8 +90,7 @@ let detectionConfidence = 0;
 let repInProgress = false;
 let selectedExercise = 'bicep_curl';
 let isCameraStarting = false;
-let lastFrameTime = 0;
-let isPoseDetectionRunning = false;
+let animationId = null;
 
 // Colors
 const COLORS = {
@@ -166,7 +165,7 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_THUMB],
     [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_INDEX],
     [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_PINKY],
-    [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_THUMB],
+    [LANDMARK_INDices.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_THUMB],
     [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_INDEX],
     [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_PINKY],
 
@@ -319,7 +318,7 @@ async function startCamera() {
             throw new Error('Failed to initialize pose detection');
         }
         
-        startPoseDetectionLoop();
+        startPoseDetection();
         updateStatus('Ready - Move into frame!');
         startFPSCounter();
         console.log('Camera and MediaPipe started successfully');
@@ -347,12 +346,13 @@ async function startCamera() {
     }
 }
 
-function startPoseDetectionLoop() {
-    if (isPoseDetectionRunning) return;
-    isPoseDetectionRunning = true;
+function startPoseDetection() {
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+    }
     
     function detectPose() {
-        if (!pose || !videoElement.videoWidth || !isPoseDetectionRunning) return;
+        if (!pose || !videoElement.videoWidth) return;
         
         try {
             pose.send({ image: videoElement });
@@ -361,14 +361,17 @@ function startPoseDetectionLoop() {
             console.error('Pose detection error:', error);
         }
         
-        requestAnimationFrame(detectPose);
+        animationId = requestAnimationFrame(detectPose);
     }
     
     detectPose();
 }
 
 function stopCamera() {
-    isPoseDetectionRunning = false;
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
     
     if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
@@ -415,14 +418,13 @@ async function initializeMediaPipe() {
     try {
         updateStatus('Loading pose detection...');
         
-        // Load MediaPipe Pose library
-        if (typeof window.Pose === 'undefined') {
-            await loadMediaPipePose();
-        }
+        // Load MediaPipe Pose library if not already loaded
+        await loadMediaPipeScripts();
         
         // Initialize Pose
         pose = new window.Pose({
             locateFile: (file) => {
+                console.log('MediaPipe looking for file:', file);
                 return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
             }
         });
@@ -448,26 +450,45 @@ async function initializeMediaPipe() {
     }
 }
 
-async function loadMediaPipePose() {
+async function loadMediaPipeScripts() {
     return new Promise((resolve, reject) => {
-        if (document.querySelector('script[src*="pose.js"]')) {
+        // Check if MediaPipe is already loaded
+        if (window.Pose) {
             console.log('MediaPipe already loaded');
             resolve();
             return;
         }
         
+        // Load the MediaPipe Pose script
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
         script.crossOrigin = 'anonymous';
+        script.type = 'module';
         
         script.onload = () => {
-            console.log('MediaPipe Pose loaded');
-            resolve();
+            console.log('MediaPipe Pose script loaded');
+            
+            // Wait a bit for Pose class to be available
+            const checkInterval = setInterval(() => {
+                if (window.Pose) {
+                    clearInterval(checkInterval);
+                    console.log('MediaPipe Pose class available');
+                    resolve();
+                }
+            }, 100);
+            
+            // Timeout after 5 seconds
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                if (!window.Pose) {
+                    reject(new Error('MediaPipe Pose class not available after loading script'));
+                }
+            }, 5000);
         };
         
         script.onerror = (error) => {
             console.error('Failed to load MediaPipe:', error);
-            reject(new Error('Failed to load MediaPipe'));
+            reject(new Error('Failed to load MediaPipe Pose script'));
         };
         
         document.head.appendChild(script);
@@ -505,32 +526,48 @@ function onPoseResults(results) {
 
 function countDetectedLandmarks(landmarks) {
     if (!landmarks) return 0;
-    return landmarks.filter(landmark =>
-        landmark && landmark.visibility && landmark.visibility > 0.1
-    ).length;
+    let count = 0;
+    for (let i = 0; i < landmarks.length; i++) {
+        if (landmarks[i] && landmarks[i].visibility > 0.1) {
+            count++;
+        }
+    }
+    return count;
 }
 
 function calculateConfidence(results) {
     if (!results.poseWorldLandmarks) return 0;
-    const sum = results.poseWorldLandmarks.reduce((acc, landmark) =>
-        acc + (landmark.visibility || 0), 0
-    );
+    let sum = 0;
+    for (let i = 0; i < results.poseWorldLandmarks.length; i++) {
+        const landmark = results.poseWorldLandmarks[i];
+        if (landmark && landmark.visibility) {
+            sum += landmark.visibility;
+        }
+    }
     return Math.round((sum / results.poseWorldLandmarks.length) * 100);
 }
 
 // Drawing functions
 function drawSkeleton(results) {
+    if (!results.poseLandmarks) return;
+    
     const videoWidth = overlayCanvas.width;
     const videoHeight = overlayCanvas.height;
 
+    // Draw connections first
     drawConnections(results.poseLandmarks, videoWidth, videoHeight);
+    
+    // Then draw landmarks on top
     drawLandmarks(results.poseLandmarks, videoWidth, videoHeight);
+    
+    // Draw arm angles
     drawArmAngles(results.poseLandmarks, videoWidth, videoHeight);
 }
 
 function drawConnections(landmarks, width, height) {
     if (!landmarks) return;
     
+    canvasCtx.save();
     canvasCtx.lineWidth = 3;
     canvasCtx.lineCap = 'round';
 
@@ -539,127 +576,106 @@ function drawConnections(landmarks, width, height) {
         const end = landmarks[endIdx];
 
         if (start && end && start.visibility > 0.1 && end.visibility > 0.1) {
+            // Determine color based on side (person's perspective)
             let color = COLORS.connections;
 
-            if (startIdx === LANDMARK_INDICES.LEFT_SHOULDER || 
-                startIdx === LANDMARK_INDICES.LEFT_ELBOW ||
-                startIdx === LANDMARK_INDICES.LEFT_WRIST ||
-                startIdx === LANDMARK_INDICES.LEFT_HIP ||
-                startIdx === LANDMARK_INDICES.LEFT_KNEE ||
-                startIdx === LANDMARK_INDICES.LEFT_ANKLE ||
-                endIdx === LANDMARK_INDICES.LEFT_SHOULDER ||
-                endIdx === LANDMARK_INDICES.LEFT_ELBOW ||
-                endIdx === LANDMARK_INDICES.LEFT_WRIST ||
-                endIdx === LANDMARK_INDICES.LEFT_HIP ||
-                endIdx === LANDMARK_INDICES.LEFT_KNEE ||
-                endIdx === LANDMARK_INDICES.LEFT_ANKLE) {
+            // Left side connections (person's left)
+            if (startIdx <= 10 || startIdx % 2 === 1) {
                 color = COLORS.leftSide;
             }
-            else if (startIdx === LANDMARK_INDICES.RIGHT_SHOULDER ||
-                     startIdx === LANDMARK_INDICES.RIGHT_ELBOW ||
-                     startIdx === LANDMARK_INDICES.RIGHT_WRIST ||
-                     startIdx === LANDMARK_INDICES.RIGHT_HIP ||
-                     startIdx === LANDMARK_INDICES.RIGHT_KNEE ||
-                     startIdx === LANDMARK_INDICES.RIGHT_ANKLE ||
-                     endIdx === LANDMARK_INDICES.RIGHT_SHOULDER ||
-                     endIdx === LANDMARK_INDICES.RIGHT_ELBOW ||
-                     endIdx === LANDMARK_INDICES.RIGHT_WRIST ||
-                     endIdx === LANDMARK_INDICES.RIGHT_HIP ||
-                     endIdx === LANDMARK_INDICES.RIGHT_KNEE ||
-                     endIdx === LANDMARK_INDICES.RIGHT_ANKLE) {
+            // Right side connections (person's right)
+            else if (startIdx % 2 === 0) {
                 color = COLORS.rightSide;
             }
 
-            drawLine(start, end, width, height, color);
+            const startX = flipX(start.x, width);
+            const startY = flipY(start.y, height);
+            const endX = flipX(end.x, width);
+            const endY = flipY(end.y, height);
+
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(startX, startY);
+            canvasCtx.lineTo(endX, endY);
+            canvasCtx.strokeStyle = color;
+            canvasCtx.stroke();
         }
     });
-}
-
-function drawLine(start, end, width, height, color) {
-    const startX = flipX(start.x, width);
-    const startY = flipY(start.y, height);
-    const endX = flipX(end.x, width);
-    const endY = flipY(end.y, height);
-
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(startX, startY);
-    canvasCtx.lineTo(endX, endY);
-    canvasCtx.strokeStyle = color;
-    canvasCtx.lineWidth = 3;
-    canvasCtx.lineCap = 'round';
-    canvasCtx.stroke();
+    
+    canvasCtx.restore();
 }
 
 function drawLandmarks(landmarks, width, height) {
     if (!landmarks) return;
     
+    canvasCtx.save();
+    
     landmarks.forEach((landmark, index) => {
         if (landmark && landmark.visibility > 0.1) {
             let color, size;
 
+            // Determine color based on index
             if (index <= 10) {
-                color = index <= 3 || index === 7 || index === 9 ? 
-                        COLORS.leftSide : COLORS.rightSide;
+                // Face landmarks
+                if (index <= 3 || index === 7 || index === 9) {
+                    color = COLORS.leftSide;
+                } else {
+                    color = COLORS.rightSide;
+                }
                 size = 5;
             } else if (index <= 22) {
-                if (index === LANDMARK_INDICES.LEFT_SHOULDER ||
-                    index === LANDMARK_INDICES.LEFT_ELBOW ||
-                    index === LANDMARK_INDICES.LEFT_WRIST ||
-                    index === LANDMARK_INDICES.LEFT_PINKY ||
-                    index === LANDMARK_INDICES.LEFT_INDEX ||
-                    index === LANDMARK_INDICES.LEFT_THUMB) {
+                // Upper body
+                if (index % 2 === 1) { // Odd indices are left side
                     color = COLORS.leftSide;
-                    size = 8;
-                } else if (index === LANDMARK_INDICES.RIGHT_SHOULDER ||
-                           index === LANDMARK_INDICES.RIGHT_ELBOW ||
-                           index === LANDMARK_INDices.RIGHT_WRIST ||
-                           index === LANDMARK_INDICES.RIGHT_PINKY ||
-                           index === LANDMARK_INDICES.RIGHT_INDEX ||
-                           index === LANDMARK_INDICES.RIGHT_THUMB) {
+                } else { // Even indices are right side
                     color = COLORS.rightSide;
-                    size = 8;
-                } else {
+                }
+                size = 8;
+                
+                // Center landmarks
+                if (index === 0 || index === 11 || index === 12) {
                     color = COLORS.center;
-                    size = 6;
+                    size = index === 0 ? 9 : 10;
                 }
             } else {
-                color = index % 2 === 1 ? COLORS.leftSide : COLORS.rightSide;
+                // Lower body
+                if (index % 2 === 1) {
+                    color = COLORS.leftSide;
+                } else {
+                    color = COLORS.rightSide;
+                }
                 size = 7;
-            }
-
-            if (index === 0) {
-                color = COLORS.center;
-                size = 9;
-            }
-
-            if (index === 11 || index === 12) {
-                size = 10;
             }
 
             drawPoint(landmark, width, height, color, size, index);
         }
     });
+    
+    canvasCtx.restore();
 }
 
 function drawPoint(landmark, width, height, color, size, index) {
     const x = flipX(landmark.x, width);
     const y = flipY(landmark.y, height);
 
+    // Outer glow
     canvasCtx.beginPath();
     canvasCtx.arc(x, y, size * 1.5, 0, 2 * Math.PI);
-    canvasCtx.fillStyle = color + '40';
+    canvasCtx.fillStyle = color + '40'; // 40 = 25% opacity in hex
     canvasCtx.fill();
 
+    // Main point
     canvasCtx.beginPath();
     canvasCtx.arc(x, y, size, 0, 2 * Math.PI);
     canvasCtx.fillStyle = color;
     canvasCtx.fill();
 
+    // White center dot
     canvasCtx.beginPath();
     canvasCtx.arc(x, y, size * 0.4, 0, 2 * Math.PI);
     canvasCtx.fillStyle = '#FFFFFF';
     canvasCtx.fill();
 
+    // Draw index number for debugging
     if ([0, 11, 12, 13, 14, 15, 16].includes(index)) {
         canvasCtx.fillStyle = '#FFFFFF';
         canvasCtx.font = 'bold 11px Arial';
@@ -670,6 +686,9 @@ function drawPoint(landmark, width, height, color, size, index) {
 }
 
 function drawArmAngles(landmarks, width, height) {
+    if (!landmarks) return;
+    
+    // Left arm angle
     const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
     const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
     const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
@@ -681,6 +700,7 @@ function drawArmAngles(landmarks, width, height) {
         drawAngleArc(leftShoulder, leftElbow, leftWrist, width, height, COLORS.leftSide, "LEFT");
     }
 
+    // Right arm angle
     const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
     const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
@@ -702,28 +722,35 @@ function drawAngleArc(shoulder, elbow, wrist, width, height, color, side) {
     const wristX = flipX(wrist.x, width);
     const wristY = flipY(wrist.y, height);
 
+    // Calculate angle
     const angle = calculateAngle(shoulder, elbow, wrist);
     const radius = 35;
 
+    // Calculate angles for arc
     const startAngle = Math.atan2(shoulderY - elbowY, shoulderX - elbowX);
     const endAngle = Math.atan2(wristY - elbowY, wristX - elbowX);
 
+    // Draw arc
+    canvasCtx.save();
     canvasCtx.beginPath();
     canvasCtx.arc(elbowX, elbowY, radius, startAngle, endAngle);
     canvasCtx.strokeStyle = color;
     canvasCtx.lineWidth = 4;
     canvasCtx.lineCap = 'round';
     canvasCtx.stroke();
-
+    
+    // Draw angle text
     canvasCtx.fillStyle = '#FFFFFF';
     canvasCtx.font = 'bold 14px Arial';
     canvasCtx.textAlign = 'center';
     canvasCtx.textBaseline = 'middle';
     canvasCtx.fillText(`${Math.round(angle)}°`, elbowX, elbowY - radius - 10);
 
+    // Draw side label
     canvasCtx.fillStyle = color;
     canvasCtx.font = 'bold 12px Arial';
     canvasCtx.fillText(side, elbowX, elbowY + radius + 15);
+    canvasCtx.restore();
 }
 
 function clearCanvas() {
@@ -732,14 +759,19 @@ function clearCanvas() {
 
 // Angle calculation
 function calculateArmAngles(landmarks) {
+    if (!landmarks) return;
+    
+    // Left arm
     const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
     const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
     const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
 
+    // Right arm
     const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
     const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
 
+    // Update left arm
     if (leftShoulder && leftElbow && leftWrist &&
         leftShoulder.visibility > 0.3 &&
         leftElbow.visibility > 0.3 &&
@@ -752,6 +784,7 @@ function calculateArmAngles(landmarks) {
         updateLeftArmUI(0, false);
     }
 
+    // Update right arm
     if (rightShoulder && rightElbow && rightWrist &&
         rightShoulder.visibility > 0.3 &&
         rightElbow.visibility > 0.3 &&
@@ -764,6 +797,7 @@ function calculateArmAngles(landmarks) {
         updateRightArmUI(0, false);
     }
 
+    // Update arm visibility status
     const leftArmVisible = leftShoulder && leftElbow && leftWrist;
     const rightArmVisible = rightShoulder && rightElbow && rightWrist;
     updateArmVisibility(leftArmVisible, rightArmVisible);
@@ -785,6 +819,7 @@ function calculateAngle(a, b, c) {
 function countExercise(angle, side) {
     const config = exerciseConfig[selectedExercise];
     
+    // Reset repInProgress when both arms are extended
     if (selectedExercise === 'bicep_curl') {
         if (side === 'right' && angle > 160 && leftArmAngle > 160) {
             repInProgress = false;
@@ -808,6 +843,7 @@ function countExercise(angle, side) {
         }
     }
     
+    // Bicep curls
     if (selectedExercise === 'bicep_curl') {
         if (side === 'left') {
             if (angle > config.angleDown) {
@@ -832,7 +868,7 @@ function countExercise(angle, side) {
                     animateTotalRep();
                 }
             }
-        } else {
+        } else { // right arm
             if (angle > config.angleDown) {
                 rightStageState = "down";
                 updateRightStage(config.downLabel, config.downColor);
@@ -857,6 +893,7 @@ function countExercise(angle, side) {
             }
         }
     } 
+    // Pull-ups
     else if (selectedExercise === 'pull_up') {
         if (side === 'left') {
             if (angle < config.angleUp) {
@@ -881,7 +918,7 @@ function countExercise(angle, side) {
                     animateTotalRep();
                 }
             }
-        } else {
+        } else { // right arm
             if (angle < config.angleUp) {
                 rightStageState = "up";
                 updateRightStage(config.upLabel, config.upColor);
@@ -906,6 +943,7 @@ function countExercise(angle, side) {
             }
         }
     } 
+    // Push-ups
     else if (selectedExercise === 'push_up') {
         if (side === 'left') {
             if (angle > config.angleDown) {
@@ -930,7 +968,7 @@ function countExercise(angle, side) {
                     animateTotalRep();
                 }
             }
-        } else {
+        } else { // right arm
             if (angle > config.angleDown) {
                 rightStageState = "up";
                 updateRightStage(config.downLabel, config.downColor);
@@ -1034,17 +1072,23 @@ function updateTotalRepsDisplay() {
 }
 
 function animateLeftRep() {
-    document.querySelector('.left-angle').classList.add('highlight-active');
-    setTimeout(() => {
-        document.querySelector('.left-angle').classList.remove('highlight-active');
-    }, 1000);
+    const leftAngleElement = document.querySelector('.left-angle');
+    if (leftAngleElement) {
+        leftAngleElement.classList.add('highlight-active');
+        setTimeout(() => {
+            leftAngleElement.classList.remove('highlight-active');
+        }, 1000);
+    }
 }
 
 function animateRightRep() {
-    document.querySelector('.right-angle').classList.add('highlight-active');
-    setTimeout(() => {
-        document.querySelector('.right-angle').classList.remove('highlight-active');
-    }, 1000);
+    const rightAngleElement = document.querySelector('.right-angle');
+    if (rightAngleElement) {
+        rightAngleElement.classList.add('highlight-active');
+        setTimeout(() => {
+            rightAngleElement.classList.remove('highlight-active');
+        }, 1000);
+    }
 }
 
 function animateTotalRep() {
