@@ -220,6 +220,9 @@ function goToDetectionPage(exerciseType) {
     // Reset counters for new exercise
     resetAll();
     
+    // Reset exercise-specific states
+    resetExerciseSpecificStates();
+    
     // Show permission prompt immediately
     showPermissionPrompt();
     
@@ -947,7 +950,57 @@ function countExercise(angle, side) {
             }
         }
     } 
-    else if (selectedExercise === 'pull_up') {
+     else if (selectedExercise === 'pull_up') {
+        // Pull-up: Count when arm goes from bent (<30) to extended (>120)
+        if (side === 'left') {
+            if (angle < config.angleUp) {
+                leftStageState = "up";
+                updateLeftStage(config.upLabel, config.upColor);
+                updateLeftStageProgress(1);
+            }
+
+            if (angle > config.angleDown && leftStageState === "up") {
+                leftStageState = "down";
+                leftArmCounter++;
+                updateLeftCounter();
+                updateTotalReps();
+                updateLeftStage(config.downLabel, config.downColor);
+                updateLeftStageProgress(0);
+                animateLeftRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        } else { // right arm
+            if (angle < config.angleUp) {
+                rightStageState = "up";
+                updateRightStage(config.upLabel, config.upColor);
+                updateRightStageProgress(1);
+            }
+
+            if (angle > config.angleDown && rightStageState === "up") {
+                rightStageState = "down";
+                rightArmCounter++;
+                updateRightCounter();
+                updateTotalReps();
+                updateRightStage(config.downLabel, config.downColor);
+                updateRightStageProgress(0);
+                animateRightRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        }
+    } 
+     else if (selectedExercise === 'pull_up') {
         // Pull-up: Count when arm goes from bent (<30) to extended (>120)
         if (side === 'left') {
             if (angle < config.angleUp) {
@@ -999,7 +1052,7 @@ function countExercise(angle, side) {
     } 
     else if (selectedExercise === 'push_up') {
         // Push-up: Count when arm goes from extended (>150) to bent (<60)
-        // IMPORTANT: This is the opposite logic of bicep curls
+        
         if (side === 'left') {
             if (angle > config.angleDown) {
                 leftStageState = "up";
@@ -1048,6 +1101,21 @@ function countExercise(angle, side) {
             }
         }
     }
+}
+
+function resetExerciseSpecificStates() {
+    const config = exerciseConfig[selectedExercise];
+    
+    // Reset stage states for the selected exercise
+    leftStageState = null;
+    rightStageState = null;
+    repInProgress = false;
+    
+    // Reset UI to default for selected exercise
+    updateLeftStage('--', config.readyColor);
+    updateRightStage('--', config.readyColor);
+    updateLeftStageProgress(0);
+    updateRightStageProgress(0);
 }
 
 // ==================== UI UPDATES ====================
