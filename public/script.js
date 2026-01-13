@@ -872,9 +872,8 @@ function calculateAngle(a, b, c) {
 function countExercise(angle, side) {
     const config = exerciseConfig[selectedExercise];
     
-    
+    // Reset repInProgress when both arms are extended
     if (selectedExercise === 'bicep_curl') {
-        
         if (side === 'right' && angle > 160 && leftArmAngle > 160) {
             repInProgress = false;
         }
@@ -882,179 +881,143 @@ function countExercise(angle, side) {
             repInProgress = false;
         }
     } else if (selectedExercise === 'pull_up') {
-        // For pull-ups: reset when both arms are extended (>120)
-        if (side === 'right' && angle > 120 && leftArmAngle > 120) {
+        if (side === 'right' && angle > 140 && leftArmAngle > 140) {
             repInProgress = false;
         }
-        if (side === 'left' && angle > 120 && rightArmAngle > 120) {
+        if (side === 'left' && angle > 140 && rightArmAngle > 140) {
             repInProgress = false;
         }
     } else if (selectedExercise === 'push_up') {
-        // For push-ups: reset when both arms are extended (>150)
-        if (side === 'right' && angle > 150 && leftArmAngle > 150) {
+        if (side === 'right' && angle > 160 && leftArmAngle > 160) {
             repInProgress = false;
         }
-        if (side === 'left' && angle > 150 && rightArmAngle > 150) {
+        if (side === 'left' && angle > 160 && rightArmAngle > 160) {
             repInProgress = false;
         }
     }
     
-    // EXERCISE-SPECIFIC COUNTING LOGIC
+    // Get form validation results (you'll need to implement these)
+    const handsAbove = areHandsAboveShoulders(landmarks);
+    const elbowsBelow = areElbowsBelowShoulders(landmarks);
+    
+    // EXERCISE-SPECIFIC COUNTING LOGIC (aligned with Dart logic)
     if (selectedExercise === 'bicep_curl') {
-    if (side === 'left') {
-        if (angle > config.angleDown) {
-            leftStageState = "down";
-            updateLeftStage(config.downLabel, config.downColor);
-            updateLeftStageProgress(1);
-        }
-
-        if (angle < config.angleUp && leftStageState === "down") {
-            leftStageState = "up";
-            leftArmCounter++;
-            updateLeftCounter();
-            updateTotalReps();
-            updateLeftStage(config.upLabel, config.upColor);
-            updateLeftStageProgress(0);
-            animateLeftRep();
-            
-            // ALWAYS count total rep for bicep curls (single or both arms)
-            totalRepsCounter++;
-            updateTotalRepsDisplay();
-            animateTotalRep();
-        }
-    } else { // right arm
-        if (angle > config.angleDown) {
-            rightStageState = "down";
-            updateRightStage(config.downLabel, config.downColor);
-            updateRightStageProgress(1);
-        }
-
-        if (angle < config.angleUp && rightStageState === "down") {
-            rightStageState = "up";
-            rightArmCounter++;
-            updateRightCounter();
-            updateTotalReps();
-            updateRightStage(config.upLabel, config.upColor);
-            updateRightStageProgress(0);
-            animateRightRep();
-            
-            // ALWAYS count total rep for bicep curls (single or both arms)
-            totalRepsCounter++;
-            updateTotalRepsDisplay();
-            animateTotalRep();
-        }
-    }}
-    else if (selectedExercise === 'pull_up') {
-        // Pull-up: Count when arm goes from bent (<30) to extended (>120)
-        if (side === 'left') {
-            if (angle < config.angleUp) {
-                leftStageState = "up";
-                updateLeftStage(config.upLabel, config.upColor);
-                updateLeftStageProgress(1);
-            }
-
-            if (angle > config.angleDown && leftStageState === "up") {
-                leftStageState = "down";
-                leftArmCounter++;
-                updateLeftCounter();
-                updateTotalReps();
-                updateLeftStage(config.downLabel, config.downColor);
-                updateLeftStageProgress(0);
-                animateLeftRep();
-                
-                if (!repInProgress) {
-                    repInProgress = true;
-                    totalRepsCounter++;
-                    updateTotalRepsDisplay();
-                    animateTotalRep();
-                }
-            }
-        } else { // right arm
-            if (angle < config.angleUp) {
-                rightStageState = "up";
-                updateRightStage(config.upLabel, config.upColor);
-                updateRightStageProgress(1);
-            }
-
-            if (angle > config.angleDown && rightStageState === "up") {
-                rightStageState = "down";
-                rightArmCounter++;
-                updateRightCounter();
-                updateTotalReps();
-                updateRightStage(config.downLabel, config.downColor);
-                updateRightStageProgress(0);
-                animateRightRep();
-                
-                if (!repInProgress) {
-                    repInProgress = true;
-                    totalRepsCounter++;
-                    updateTotalRepsDisplay();
-                    animateTotalRep();
-                }
-            }
-        }
-    } 
-     else if (selectedExercise === 'pull_up') {
-        // Pull-up: Count when arm goes from bent (<30) to extended (>120)
-        if (side === 'left') {
-            if (angle < config.angleUp) {
-                leftStageState = "up";
-                updateLeftStage(config.upLabel, config.upColor);
-                updateLeftStageProgress(1);
-            }
-
-            if (angle > config.angleDown && leftStageState === "up") {
-                leftStageState = "down";
-                leftArmCounter++;
-                updateLeftCounter();
-                updateTotalReps();
-                updateLeftStage(config.downLabel, config.downColor);
-                updateLeftStageProgress(0);
-                animateLeftRep();
-                
-                if (!repInProgress) {
-                    repInProgress = true;
-                    totalRepsCounter++;
-                    updateTotalRepsDisplay();
-                    animateTotalRep();
-                }
-            }
-        } else { // right arm
-            if (angle < config.angleUp) {
-                rightStageState = "up";
-                updateRightStage(config.upLabel, config.upColor);
-                updateRightStageProgress(1);
-            }
-
-            if (angle > config.angleDown && rightStageState === "up") {
-                rightStageState = "down";
-                rightArmCounter++;
-                updateRightCounter();
-                updateTotalReps();
-                updateRightStage(config.downLabel, config.downColor);
-                updateRightStageProgress(0);
-                animateRightRep();
-                
-                if (!repInProgress) {
-                    repInProgress = true;
-                    totalRepsCounter++;
-                    updateTotalRepsDisplay();
-                    animateTotalRep();
-                }
-            }
-        }
-    } 
-    else if (selectedExercise === 'push_up') {
-        // Push-up: Count when arm goes from extended (>150) to bent (<60)
+        // Bicep curl: Count when arm goes from extended (>160) to curled (<45)
+        // AND elbows must be below shoulders
+        if (!elbowsBelow) return;
         
         if (side === 'left') {
-            if (angle > config.angleDown) {
+            if (angle > 160) {
+                leftStageState = "down";
+                updateLeftStage(config.downLabel, config.downColor);
+                updateLeftStageProgress(1);
+            }
+
+            if (angle < 45 && leftStageState === "down") {
+                leftStageState = "up";
+                leftArmCounter++;
+                updateLeftCounter();
+                updateTotalReps();
+                updateLeftStage(config.upLabel, config.upColor);
+                updateLeftStageProgress(0);
+                animateLeftRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        } else { // right arm
+            if (angle > 160) {
+                rightStageState = "down";
+                updateRightStage(config.downLabel, config.downColor);
+                updateRightStageProgress(1);
+            }
+
+            if (angle < 45 && rightStageState === "down") {
+                rightStageState = "up";
+                rightArmCounter++;
+                updateRightCounter();
+                updateTotalReps();
+                updateRightStage(config.upLabel, config.upColor);
+                updateRightStageProgress(0);
+                animateRightRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        }
+    } 
+    else if (selectedExercise === 'pull_up') {
+        // Pull-up: Count when arm goes from extended (>140) to bent (<65)
+        // AND hands must be above shoulders
+        if (!handsAbove) return;
+        
+        if (side === 'left') {
+            if (angle > 140) {
+                leftStageState = "down";
+                updateLeftStage(config.downLabel, config.downColor);
+                updateLeftStageProgress(1);
+            }
+
+            if (angle < 65 && leftStageState === "down") {
+                leftStageState = "up";
+                leftArmCounter++;
+                updateLeftCounter();
+                updateTotalReps();
+                updateLeftStage(config.upLabel, config.upColor);
+                updateLeftStageProgress(0);
+                animateLeftRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        } else { // right arm
+            if (angle > 140) {
+                rightStageState = "down";
+                updateRightStage(config.downLabel, config.downColor);
+                updateRightStageProgress(1);
+            }
+
+            if (angle < 65 && rightStageState === "down") {
+                rightStageState = "up";
+                rightArmCounter++;
+                updateRightCounter();
+                updateTotalReps();
+                updateRightStage(config.upLabel, config.upColor);
+                updateRightStageProgress(0);
+                animateRightRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        }
+    }
+    else if (selectedExercise === 'push_up') {
+        // Push-up: Count when arm goes from extended (>160) to bent (<90)
+        
+        if (side === 'left') {
+            if (angle > 160) {
                 leftStageState = "up";
                 updateLeftStage(config.downLabel, config.downColor);
                 updateLeftStageProgress(1);
             }
 
-            if (angle < config.angleUp && leftStageState === "up") {
+            if (angle < 90 && leftStageState === "up") {
                 leftStageState = "down";
                 leftArmCounter++;
                 updateLeftCounter();
@@ -1071,13 +1034,13 @@ function countExercise(angle, side) {
                 }
             }
         } else { // right arm
-            if (angle > config.angleDown) {
+            if (angle > 160) {
                 rightStageState = "up";
                 updateRightStage(config.downLabel, config.downColor);
                 updateRightStageProgress(1);
             }
 
-            if (angle < config.angleUp && rightStageState === "up") {
+            if (angle < 90 && rightStageState === "up") {
                 rightStageState = "down";
                 rightArmCounter++;
                 updateRightCounter();
@@ -1095,6 +1058,37 @@ function countExercise(angle, side) {
             }
         }
     }
+}
+
+// You need to implement these form validation functions:
+function areHandsAboveShoulders(landmarks) {
+    const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
+    const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
+    const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
+    const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
+    
+    if (!leftShoulder || !rightShoulder || !leftWrist || !rightWrist) return false;
+    
+    // Check if wrists are above shoulders (lower y value means higher position)
+    const leftHandAbove = leftWrist.y < leftShoulder.y;
+    const rightHandAbove = rightWrist.y < rightShoulder.y;
+    
+    return leftHandAbove || rightHandAbove;
+}
+
+function areElbowsBelowShoulders(landmarks) {
+    const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
+    const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
+    const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
+    const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
+    
+    if (!leftShoulder || !rightShoulder || !leftElbow || !rightElbow) return false;
+    
+    // Check if elbows are below shoulders (higher y value means lower position)
+    const leftElbowBelow = leftElbow.y > leftShoulder.y;
+    const rightElbowBelow = rightElbow.y > rightShoulder.y;
+    
+    return leftElbowBelow && rightElbowBelow;
 }
 
 function resetExerciseSpecificStates() {
