@@ -476,7 +476,7 @@ async function initializeAndStartCamera() {
         
         await camera.start();
         console.log('Camera started successfully');
-        updateStatus('Ready - Move into frame!');
+        updateStatus('Ready');
         
         isInitialized = true;
         
@@ -565,7 +565,8 @@ function onPoseResults(results) {
         // Calculate and display both arm angles
         calculateArmAngles(landmarks);
         
-        updateStatus(`${detectedCount} points detected`);
+        // REMOVED: updateStatus(`${detectedCount} points detected`);
+        updateStatus('Tracking active'); // Simple status message
         
         // Update latency
         const latency = Math.round(performance.now() - startTime);
@@ -574,7 +575,7 @@ function onPoseResults(results) {
         landmarks = null;
         clearCanvas();
         updateLandmarkStats(0);
-        updateStatus('Move into frame - No pose detected');
+        updateStatus('Move into frame'); // Simpler message without "No pose detected"
     }
     
     frameCount++;
@@ -1294,7 +1295,9 @@ function updateArmVisibility(leftVisible, rightVisible) {
 
 function updateStatus(message) {
     const config = exerciseConfig[selectedExercise];
-    const statusMessage = `${config.name}: ${message}`;
+    
+
+    const statusMessage = message.includes(config.name) ? message : message;
     
     if (poseStatus) poseStatus.textContent = statusMessage;
     if (detectionStatus) detectionStatus.textContent = statusMessage;
