@@ -111,137 +111,143 @@
                                     <div class="detection-info">
                                         <span id="poseStatus" class="pose-status">Initializing...</span>
                                     </div>
+
+                                    <div class="permission-prompt" id="permissionPrompt" style="display: none;">
+                                        <div class="permission-content">
+                                            <div class="permission-icon">📸</div>
+                                            <div class="permission-text">Allow camera access to start exercise tracking
+                                            </div>
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
 
-                        </div>
-                    </div>
-
-                    <!-- Stats Panel -->
-                    <div class="stats-panel">
-                        <!-- Real-time Angles -->
-                        <div class="angles-card">
-                            <h2>📐 Dual Arm Angles</h2>
-                            <div class="angles-display">
-                                <div class="angle-gauge left-angle">
-                                    <div class="gauge-header">
-                                        <span class="arm-label">Left Arm</span>
-                                        <span id="leftAngleValue" class="angle-text">--°</span>
-                                    </div>
-                                    <div class="gauge-circle">
-                                        <div class="circle-fill" id="leftAngleFill"></div>
-                                        <div class="circle-center">
-                                            <div class="angle-stage" id="leftStage">--</div>
+                            <!-- Stats Panel -->
+                            <div class="stats-panel">
+                                <!-- Real-time Angles -->
+                                <div class="angles-card">
+                                    <h2>📐 Dual Arm Angles</h2>
+                                    <div class="angles-display">
+                                        <div class="angle-gauge left-angle">
+                                            <div class="gauge-header">
+                                                <span class="arm-label">Left Arm</span>
+                                                <span id="leftAngleValue" class="angle-text">--°</span>
+                                            </div>
+                                            <div class="gauge-circle">
+                                                <div class="circle-fill" id="leftAngleFill"></div>
+                                                <div class="circle-center">
+                                                    <div class="angle-stage" id="leftStage">--</div>
+                                                </div>
+                                            </div>
+                                            <div class="gauge-footer">
+                                                <div class="stage-indicator" id="leftStageIndicator"></div>
+                                                <span class="stage-text" id="leftStageText">Ready</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="gauge-footer">
-                                        <div class="stage-indicator" id="leftStageIndicator"></div>
-                                        <span class="stage-text" id="leftStageText">Ready</span>
-                                    </div>
-                                </div>
 
-                                <div class="angle-gauge right-angle">
-                                    <div class="gauge-header">
-                                        <span class="arm-label">Right Arm</span>
-                                        <span id="rightAngleValue" class="angle-text">--°</span>
-                                    </div>
-                                    <div class="gauge-circle">
-                                        <div class="circle-fill" id="rightAngleFill"></div>
-                                        <div class="circle-center">
-                                            <div class="angle-stage" id="rightStage">--</div>
-                                        </div>
-                                    </div>
-                                    <div class="gauge-footer">
-                                        <div class="stage-indicator" id="rightStageIndicator"></div>
-                                        <span class="stage-text" id="rightStageText">Ready</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Performance Stats -->
-                        <div class="performance-card">
-                            <h2>📊 Performance</h2>
-                            <div class="stats-grid">
-                                <div class="stat-item">
-                                    <div class="stat-icon">🎯</div>
-                                    <div class="stat-content">
-                                        <div class="stat-label">Landmarks Detected</div>
-                                        <div class="stat-value" id="detectedPoints">0</div>
-                                        <div class="stat-progress">
-                                            <div class="progress-bar">
-                                                <div class="progress-fill" id="landmarksProgress"></div>
+                                        <div class="angle-gauge right-angle">
+                                            <div class="gauge-header">
+                                                <span class="arm-label">Right Arm</span>
+                                                <span id="rightAngleValue" class="angle-text">--°</span>
+                                            </div>
+                                            <div class="gauge-circle">
+                                                <div class="circle-fill" id="rightAngleFill"></div>
+                                                <div class="circle-center">
+                                                    <div class="angle-stage" id="rightStage">--</div>
+                                                </div>
+                                            </div>
+                                            <div class="gauge-footer">
+                                                <div class="stage-indicator" id="rightStageIndicator"></div>
+                                                <span class="stage-text" id="rightStageText">Ready</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div class="stat-item">
-                                    <div class="stat-icon">⚡</div>
-                                    <div class="stat-content">
-                                        <div class="stat-label">Processing Mode</div>
-                                        <div class="stat-value" id="processingMode">API</div>
-                                        <div class="stat-detail" id="latencyDisplay">Latency: --ms</div>
+                                <!-- Performance Stats -->
+                                <div class="performance-card">
+                                    <h2>📊 Performance</h2>
+                                    <div class="stats-grid">
+                                        <div class="stat-item">
+                                            <div class="stat-icon">🎯</div>
+                                            <div class="stat-content">
+                                                <div class="stat-label">Landmarks Detected</div>
+                                                <div class="stat-value" id="detectedPoints">0</div>
+                                                <div class="stat-progress">
+                                                    <div class="progress-bar">
+                                                        <div class="progress-fill" id="landmarksProgress"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="stat-item">
+                                            <div class="stat-icon">⚡</div>
+                                            <div class="stat-content">
+                                                <div class="stat-label">Processing Mode</div>
+                                                <div class="stat-value" id="processingMode">API</div>
+                                                <div class="stat-detail" id="latencyDisplay">Latency: --ms</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="stat-item">
+                                            <div class="stat-icon">📈</div>
+                                            <div class="stat-content">
+                                                <div class="stat-label">Frame Rate</div>
+                                                <div class="stat-value" id="fpsCounter">-- FPS</div>
+                                                <div class="stat-detail" id="confidenceDisplay">Confidence: --%</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="stat-item">
+                                            <div class="stat-icon">🤖</div>
+                                            <div class="stat-content">
+                                                <div class="stat-label">Detection Status</div>
+                                                <div class="stat-value" id="detectionStatus">Ready</div>
+                                                <div class="stat-detail" id="armVisibility">Arms: --</div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div class="stat-item">
-                                    <div class="stat-icon">📈</div>
-                                    <div class="stat-content">
-                                        <div class="stat-label">Frame Rate</div>
-                                        <div class="stat-value" id="fpsCounter">-- FPS</div>
-                                        <div class="stat-detail" id="confidenceDisplay">Confidence: --%</div>
+                                <!-- Landmark Legend -->
+                                <div class="legend-card">
+                                    <h2>📍 Landmark Colors</h2>
+                                    <div class="legend-grid">
+                                        <div class="legend-item">
+                                            <span class="legend-dot" style="background: #FF6B6B;"></span>
+                                            <span class="legend-text">Left Side Points</span>
+                                        </div>
+                                        <div class="legend-item">
+                                            <span class="legend-dot" style="background: #4CC9F0;"></span>
+                                            <span class="legend-text">Right Side Points</span>
+                                        </div>
+                                        <div class="legend-item">
+                                            <span class="legend-dot" style="background: #FFD166;"></span>
+                                            <span class="legend-text">Center Points</span>
+                                        </div>
+                                        <div class="legend-item">
+                                            <span class="legend-dot" style="background: #06D6A0;"></span>
+                                            <span class="legend-text">Angle Arcs</span>
+                                        </div>
+                                        <div class="legend-item">
+                                            <span class="legend-dot" style="background: #118AB2;"></span>
+                                            <span class="legend-text">Skeleton Lines</span>
+                                        </div>
+                                        <div class="legend-item">
+                                            <span class="legend-dot" style="background: #EF476F;"></span>
+                                            <span class="legend-text">Active Arm</span>
+                                        </div>
                                     </div>
-                                </div>
-
-                                <div class="stat-item">
-                                    <div class="stat-icon">🤖</div>
-                                    <div class="stat-content">
-                                        <div class="stat-label">Detection Status</div>
-                                        <div class="stat-value" id="detectionStatus">Ready</div>
-                                        <div class="stat-detail" id="armVisibility">Arms: --</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Landmark Legend -->
-                        <div class="legend-card">
-                            <h2>📍 Landmark Colors</h2>
-                            <div class="legend-grid">
-                                <div class="legend-item">
-                                    <span class="legend-dot" style="background: #FF6B6B;"></span>
-                                    <span class="legend-text">Left Side Points</span>
-                                </div>
-                                <div class="legend-item">
-                                    <span class="legend-dot" style="background: #4CC9F0;"></span>
-                                    <span class="legend-text">Right Side Points</span>
-                                </div>
-                                <div class="legend-item">
-                                    <span class="legend-dot" style="background: #FFD166;"></span>
-                                    <span class="legend-text">Center Points</span>
-                                </div>
-                                <div class="legend-item">
-                                    <span class="legend-dot" style="background: #06D6A0;"></span>
-                                    <span class="legend-text">Angle Arcs</span>
-                                </div>
-                                <div class="legend-item">
-                                    <span class="legend-dot" style="background: #118AB2;"></span>
-                                    <span class="legend-text">Skeleton Lines</span>
-                                </div>
-                                <div class="legend-item">
-                                    <span class="legend-dot" style="background: #EF476F;"></span>
-                                    <span class="legend-text">Active Arm</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <script src="script.js"></script>
+            <script src="script.js"></script>
 </body>
 
 </html>

@@ -1,4 +1,4 @@
-// script.js - FIXED landmarks and skeleton rendering
+// script.js - COMPLETE FIXED VERSION WITH PROPER LANDMARKS AND EXERCISE COUNTING
 
 // DOM Elements
 const videoElement = document.getElementById('webcam');
@@ -31,11 +31,48 @@ const confidenceDisplay = document.getElementById('confidenceDisplay');
 const detectionStatus = document.getElementById('detectionStatus');
 const armVisibility = document.getElementById('armVisibility');
 const resetBtn = document.getElementById('resetBtn');
-const apiToggleBtn = document.getElementById('apiToggle');
 const selectionPage = document.getElementById('selectionPage');
 const detectionPage = document.getElementById('detectionPage');
 const backBtn = document.getElementById('backBtn');
 const currentExerciseName = document.getElementById('currentExerciseName');
+const permissionPrompt = document.getElementById('permissionPrompt');
+
+// Exercise-specific configurations
+const exerciseConfig = {
+    bicep_curl: {
+        name: 'Bicep Curls',
+        angleUp: 40,    // Angle threshold for "up" position (arm bent)
+        angleDown: 160, // Angle threshold for "down" position (arm extended)
+        upLabel: 'UP',
+        downLabel: 'DOWN',
+        upColor: '#EF476F',
+        downColor: '#FF6B6B',
+        readyColor: '#a0a0c0',
+        countingLogic: 'bicep_curl'
+    },
+    pull_up: {
+        name: 'Pull-ups',
+        angleUp: 30,    // Different thresholds for pull-ups (chin above bar)
+        angleDown: 120, // Different thresholds for pull-ups (arms extended)
+        upLabel: 'CHIN UP',
+        downLabel: 'EXTENDED',
+        upColor: '#06D6A0',
+        downColor: '#4CC9F0',
+        readyColor: '#a0a0c0',
+        countingLogic: 'pull_up'
+    },
+    push_up: {
+        name: 'Push-ups',
+        angleUp: 60,    // Different thresholds for push-ups (chest down)
+        angleDown: 150, // Different thresholds for push-ups (arms extended)
+        upLabel: 'DOWN',
+        downLabel: 'UP',
+        upColor: '#EF476F',
+        downColor: '#FFD166',
+        readyColor: '#a0a0c0',
+        countingLogic: 'push_up'
+    }
+};
 
 // State variables
 let leftArmCounter = 0;
@@ -54,81 +91,8 @@ let fps = 0;
 let landmarks = null;
 let detectionConfidence = 0;
 let repInProgress = false;
-let lastTime = 0;
 let selectedExercise = 'bicep_curl';
-
-const exerciseNames = {
-    bicep_curl: 'Bicep Curls',
-    pull_up: 'Pull-ups',
-    push_up: 'Push-ups'
-};
-
-// Go to detection page with selected exercise
-function goToDetectionPage(exerciseType) {
-    selectedExercise = exerciseType;
-    
-    // Update UI
-    currentExerciseName.textContent = exerciseNames[exerciseType];
-    
-    // Update page title based on exercise
-    const titleElement = document.querySelector('h1');
-    if (titleElement) {
-        titleElement.textContent = `🤸 ${exerciseNames[exerciseType]} Tracker`;
-    }
-    
-    // Switch pages
-    selectionPage.classList.remove('active');
-    detectionPage.classList.add('active');
-    
-
-    
-    // Reset counters for new exercise
-    if (typeof resetAll === 'function') {
-        resetAll();
-    }
-    
-    console.log(`Starting ${exerciseNames[exerciseType]} tracking...`);
-}
-
-// Go back to selection page
-function goToSelectionPage() {
-    detectionPage.classList.remove('active');
-    selectionPage.classList.add('active');
-    
-    // Stop camera to save resources
-    if (camera) {
-        camera.stop();
-        camera = null;
-    }
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-    }
-    
-    // Reset pose detection
-    pose = null;
-}
-
-// Add click events to exercise items
-document.addEventListener('DOMContentLoaded', function() {
-    // Add click events to exercise items
-    const exerciseItems = document.querySelectorAll('.exercise-item');
-    exerciseItems.forEach(item => {
-        item.addEventListener('click', function() {
-            const exercise = this.getAttribute('data-exercise');
-            goToDetectionPage(exercise);
-        });
-    });
-    
-    // Add click event to back button
-    if (backBtn) {
-        backBtn.addEventListener('click', goToSelectionPage);
-    }
-    
-    // Initialize with selection page visible
-    selectionPage.classList.add('active');
-    detectionPage.classList.remove('active');
-});
+let isCameraStarting = false;
 
 // Colors for correct left/right mapping (person's perspective)
 const COLORS = {
@@ -140,51 +104,44 @@ const COLORS = {
     activeArm: '#EF476F'      // Pink for active arm highlights
 };
 
-// MediaPipe landmark indices (person's perspective)
+// MediaPipe landmark indices (person's perspective) - FULL SET
 const LANDMARK_INDICES = {
-    // Face landmarks
     NOSE: 0,
-    LEFT_EYE_INNER: 1,    // Person's left
-    LEFT_EYE: 2,          // Person's left
-    LEFT_EYE_OUTER: 3,    // Person's left
-    RIGHT_EYE_INNER: 4,   // Person's right
-    RIGHT_EYE: 5,         // Person's right
-    RIGHT_EYE_OUTER: 6,   // Person's right
-    LEFT_EAR: 7,          // Person's left
-    RIGHT_EAR: 8,         // Person's right
-    MOUTH_LEFT: 9,        // Person's left
-    MOUTH_RIGHT: 10,      // Person's right
-
-    // Body landmarks - Person's perspective (no swapping needed)
-    LEFT_SHOULDER: 11,    // Person's left
-    RIGHT_SHOULDER: 12,   // Person's right
-    LEFT_ELBOW: 13,       // Person's left
-    RIGHT_ELBOW: 14,      // Person's right
-    LEFT_WRIST: 15,       // Person's left
-    RIGHT_WRIST: 16,      // Person's right
-
-    // Hands
+    LEFT_EYE_INNER: 1,
+    LEFT_EYE: 2,
+    LEFT_EYE_OUTER: 3,
+    RIGHT_EYE_INNER: 4,
+    RIGHT_EYE: 5,
+    RIGHT_EYE_OUTER: 6,
+    LEFT_EAR: 7,
+    RIGHT_EAR: 8,
+    MOUTH_LEFT: 9,
+    MOUTH_RIGHT: 10,
+    LEFT_SHOULDER: 11,
+    RIGHT_SHOULDER: 12,
+    LEFT_ELBOW: 13,
+    RIGHT_ELBOW: 14,
+    LEFT_WRIST: 15,
+    RIGHT_WRIST: 16,
     LEFT_PINKY: 17,
     RIGHT_PINKY: 18,
     LEFT_INDEX: 19,
     RIGHT_INDEX: 20,
     LEFT_THUMB: 21,
     RIGHT_THUMB: 22,
-
-    // Lower body
-    LEFT_HIP: 23,         // Person's left
-    RIGHT_HIP: 24,        // Person's right
-    LEFT_KNEE: 25,        // Person's left
-    RIGHT_KNEE: 26,       // Person's right
-    LEFT_ANKLE: 27,       // Person's left
-    RIGHT_ANKLE: 28,      // Person's right
-    LEFT_HEEL: 29,        // Person's left
-    RIGHT_HEEL: 30,       // Person's right
-    LEFT_FOOT_INDEX: 31,  // Person's left
-    RIGHT_FOOT_INDEX: 32  // Person's right
+    LEFT_HIP: 23,
+    RIGHT_HIP: 24,
+    LEFT_KNEE: 25,
+    RIGHT_KNEE: 26,
+    LEFT_ANKLE: 27,
+    RIGHT_ANKLE: 28,
+    LEFT_HEEL: 29,
+    RIGHT_HEEL: 30,
+    LEFT_FOOT_INDEX: 31,
+    RIGHT_FOOT_INDEX: 32
 };
 
-// Connections for person's perspective (no swapping needed)
+// Full skeleton connections as before
 const SKELETON_CONNECTIONS = [
     // Face connections
     [LANDMARK_INDICES.NOSE, LANDMARK_INDICES.LEFT_EYE_INNER],
@@ -197,12 +154,12 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.RIGHT_EYE_OUTER, LANDMARK_INDICES.RIGHT_EAR],
     [LANDMARK_INDICES.MOUTH_LEFT, LANDMARK_INDICES.MOUTH_RIGHT],
 
-    // Upper body - Person's perspective
+    // Upper body
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.RIGHT_SHOULDER],
-    [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_ELBOW],    // Person's left arm
-    [LANDMARK_INDICES.LEFT_ELBOW, LANDMARK_INDICES.LEFT_WRIST],      // Person's left arm
-    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_ELBOW],  // Person's right arm
-    [LANDMARK_INDICES.RIGHT_ELBOW, LANDMARK_INDICES.RIGHT_WRIST],    // Person's right arm
+    [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_ELBOW],
+    [LANDMARK_INDICES.LEFT_ELBOW, LANDMARK_INDICES.LEFT_WRIST],
+    [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_ELBOW],
+    [LANDMARK_INDICES.RIGHT_ELBOW, LANDMARK_INDICES.RIGHT_WRIST],
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_HIP],
     [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_HIP],
 
@@ -216,30 +173,252 @@ const SKELETON_CONNECTIONS = [
 
     // Lower body
     [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.RIGHT_HIP],
-    [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.LEFT_KNEE],        // Person's left leg
-    [LANDMARK_INDICES.LEFT_KNEE, LANDMARK_INDICES.LEFT_ANKLE],      // Person's left leg
-    [LANDMARK_INDICES.RIGHT_HIP, LANDMARK_INDICES.RIGHT_KNEE],      // Person's right leg
-    [LANDMARK_INDICES.RIGHT_KNEE, LANDMARK_INDICES.RIGHT_ANKLE],    // Person's right leg
+    [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.LEFT_KNEE],
+    [LANDMARK_INDICES.LEFT_KNEE, LANDMARK_INDICES.LEFT_ANKLE],
+    [LANDMARK_INDICES.RIGHT_HIP, LANDMARK_INDICES.RIGHT_KNEE],
+    [LANDMARK_INDICES.RIGHT_KNEE, LANDMARK_INDICES.RIGHT_ANKLE],
     [LANDMARK_INDICES.LEFT_ANKLE, LANDMARK_INDICES.LEFT_HEEL],
-    [LANDMARK_INDICES.RIGHT_ANKLE, LANDMARK_INDICES.RIGHT_HEEL]
+    [LANDMARK_INDICES.RIGHT_ANKLE, LANDMARK_INDICES.RIGHT_HEEL],
+    [LANDMARK_INDICES.LEFT_HEEL, LANDMARK_INDICES.LEFT_FOOT_INDEX],
+    [LANDMARK_INDICES.RIGHT_HEEL, LANDMARK_INDICES.RIGHT_FOOT_INDEX]
 ];
 
 // ==================== HELPER FUNCTIONS ====================
 
-// Convert normalized coordinates to canvas coordinates with mirroring
 function flipX(x, width) {
-    return width - x * width;
+    return width - x * width; // Mirror effect
 }
 
 function flipY(y, height) {
     return y * height;
 }
 
-// Calculate distance between two points
 function distance(point1, point2) {
     const dx = point1.x - point2.x;
     const dy = point1.y - point2.y;
     return Math.sqrt(dx * dx + dy * dy);
+}
+
+// ==================== PAGE NAVIGATION ====================
+
+function goToDetectionPage(exerciseType) {
+    console.log(`Starting exercise: ${exerciseType}`);
+    
+    selectedExercise = exerciseType;
+    const config = exerciseConfig[exerciseType];
+    
+    if (!config) {
+        console.error(`Invalid exercise type: ${exerciseType}`);
+        return;
+    }
+    
+    // Update UI
+    currentExerciseName.textContent = config.name;
+    
+    // Switch pages
+    selectionPage.classList.remove('active');
+    detectionPage.classList.add('active');
+    
+    // Reset counters for new exercise
+    resetAll();
+    
+    // Show permission prompt immediately
+    showPermissionPrompt();
+    
+    // Start camera after a short delay
+    setTimeout(() => {
+        startCamera();
+    }, 300);
+}
+
+function goToSelectionPage() {
+    console.log('Going back to selection page');
+    
+    // Stop camera and clean up
+    stopCamera();
+    
+    // Switch pages
+    detectionPage.classList.remove('active');
+    selectionPage.classList.add('active');
+}
+
+function showPermissionPrompt() {
+    if (permissionPrompt) {
+        permissionPrompt.style.display = 'flex';
+    }
+    updateStatus('Waiting for camera permission...');
+}
+
+function hidePermissionPrompt() {
+    if (permissionPrompt) {
+        permissionPrompt.style.display = 'none';
+    }
+}
+
+// ==================== CAMERA MANAGEMENT ====================
+
+async function startCamera() {
+    if (isCameraStarting) {
+        console.log('Camera is already starting...');
+        return;
+    }
+    
+    isCameraStarting = true;
+    
+    try {
+        updateStatus('Requesting camera access...');
+        
+        // Clean up any existing camera
+        stopCamera();
+        
+        // Request camera permissions
+        const constraints = {
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: 'user',
+                frameRate: { ideal: 30 }
+            },
+            audio: false
+        };
+
+        console.log('Requesting camera permissions...');
+        
+        // This will trigger the browser's permission dialog
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        if (!mediaStream) {
+            throw new Error('Failed to get media stream');
+        }
+        
+        console.log('Camera access granted!');
+        hidePermissionPrompt();
+        
+        // Set the video stream
+        videoElement.srcObject = mediaStream;
+        videoElement.muted = true;
+        videoElement.playsInline = true;
+        
+        // Wait for video to be ready
+        await waitForVideoReady();
+        
+        // Set canvas size
+        overlayCanvas.width = videoElement.videoWidth || 640;
+        overlayCanvas.height = videoElement.videoHeight || 480;
+        
+        console.log(`Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
+        
+        // Initialize MediaPipe
+        await initializeMediaPipe();
+        
+        if (!pose) {
+            throw new Error('Failed to initialize pose detection');
+        }
+        
+        // Start camera processing with MediaPipe
+        camera = new window.Camera(videoElement, {
+            onFrame: async () => {
+                if (pose) {
+                    try {
+                        await pose.send({ image: videoElement });
+                    } catch (error) {
+                        console.error('Pose detection error:', error);
+                    }
+                }
+            },
+            width: videoElement.videoWidth || 640,
+            height: videoElement.videoHeight || 480
+        });
+        
+        await camera.start();
+        updateStatus('Ready - Move into frame!');
+        
+        // Start FPS counter
+        startFPSCounter();
+        
+        console.log('Camera and MediaPipe started successfully');
+        
+    } catch (error) {
+        console.error('Camera error:', error);
+        
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            updateStatus('Camera access denied');
+            showPermissionPrompt();
+            alert('⚠️ Camera access is required for exercise tracking.\n\nPlease click "Allow" when prompted for camera permissions.');
+            
+        } else if (error.name === 'NotFoundError') {
+            updateStatus('No camera found');
+            alert('No camera found on your device. Please connect a camera and try again.');
+        } else {
+            updateStatus('Error: ' + error.message);
+            alert('Failed to start camera: ' + error.message);
+        }
+        
+        // Go back to selection page after error
+        setTimeout(() => {
+            goToSelectionPage();
+        }, 2000);
+    } finally {
+        isCameraStarting = false;
+    }
+}
+
+function stopCamera() {
+    if (camera) {
+        camera.stop();
+        camera = null;
+    }
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+    }
+    if (pose) {
+        pose.close();
+        pose = null;
+    }
+}
+
+function waitForVideoReady() {
+    return new Promise((resolve, reject) => {
+        if (videoElement.readyState >= 2) {
+            console.log('Video already ready');
+            resolve();
+            return;
+        }
+        
+        const onLoaded = () => {
+            console.log('Video metadata loaded');
+            videoElement.removeEventListener('loadedmetadata', onLoaded);
+            videoElement.removeEventListener('error', onError);
+            resolve();
+        };
+        
+        const onError = (error) => {
+            console.error('Video error:', error);
+            videoElement.removeEventListener('loadedmetadata', onLoaded);
+            videoElement.removeEventListener('error', onError);
+            reject(error);
+        };
+        
+        videoElement.addEventListener('loadedmetadata', onLoaded);
+        videoElement.addEventListener('error', onError);
+        
+        // Try to play the video
+        videoElement.play().catch(error => {
+            console.warn('Auto-play prevented:', error);
+        });
+        
+        // Fallback timeout
+        setTimeout(() => {
+            if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+                console.log('Video ready (fallback)');
+                resolve();
+            } else {
+                console.warn('Video not fully loaded, but continuing');
+                resolve();
+            }
+        }, 3000);
+    });
 }
 
 // ==================== MEDIAPIPE INITIALIZATION ====================
@@ -247,20 +426,22 @@ function distance(point1, point2) {
 async function initializeMediaPipe() {
     try {
         updateStatus('Loading pose detection...');
-
-        // Load MediaPipe
-        if (typeof window.Pose === 'undefined') {
+        
+        // Load MediaPipe scripts if not already loaded
+        if (typeof window.Pose === 'undefined' || typeof window.Camera === 'undefined') {
+            console.log('Loading MediaPipe scripts...');
             await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');
             await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
+            console.log('MediaPipe scripts loaded');
         }
-
+        
         // Initialize MediaPipe Pose
         pose = new window.Pose({
             locateFile: (file) => {
                 return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
             }
         });
-
+        
         pose.setOptions({
             modelComplexity: 1,
             smoothLandmarks: true,
@@ -268,25 +449,38 @@ async function initializeMediaPipe() {
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
-
+        
         pose.onResults(onPoseResults);
-
-        updateStatus('Ready for detection');
+        
+        console.log('MediaPipe Pose initialized successfully');
+        updateStatus('Pose detection ready');
         return true;
-
+        
     } catch (error) {
-        console.error('MediaPipe error:', error);
-        updateStatus('Failed to initialize');
+        console.error('MediaPipe initialization error:', error);
+        updateStatus('Pose detection failed');
         return false;
     }
 }
 
 function loadScript(src) {
     return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+            console.log(`Script already loaded: ${src}`);
+            resolve();
+            return;
+        }
+        
         const script = document.createElement('script');
         script.src = src;
-        script.onload = resolve;
-        script.onerror = reject;
+        script.onload = () => {
+            console.log(`Script loaded: ${src}`);
+            resolve();
+        };
+        script.onerror = (error) => {
+            console.error(`Failed to load script: ${src}`, error);
+            reject(new Error(`Failed to load script: ${src}`));
+        };
         document.head.appendChild(script);
     });
 }
@@ -294,9 +488,11 @@ function loadScript(src) {
 // ==================== POSE DETECTION & VISUALIZATION ====================
 
 function onPoseResults(results) {
+    if (!results) return;
+    
     const startTime = performance.now();
     
-    if (results.poseLandmarks) {
+    if (results.poseLandmarks && results.poseLandmarks.length > 0) {
         landmarks = results.poseLandmarks;
         detectionConfidence = calculateConfidence(results);
 
@@ -320,9 +516,9 @@ function onPoseResults(results) {
         landmarks = null;
         clearCanvas();
         updateLandmarkStats(0);
-        updateStatus('Move into frame');
+        updateStatus('Move into frame - No pose detected');
     }
-
+    
     frameCount++;
 }
 
@@ -595,7 +791,7 @@ function calculateArmAngles(landmarks) {
         leftWrist.visibility > 0.3) {
         leftArmAngle = calculateAngle(leftShoulder, leftElbow, leftWrist);
         updateLeftArmUI(leftArmAngle);
-        countLeftCurl(leftArmAngle);
+        countExercise(leftArmAngle, 'left');
     } else {
         leftArmAngle = 0;
         updateLeftArmUI(0, false);
@@ -608,7 +804,7 @@ function calculateArmAngles(landmarks) {
         rightWrist.visibility > 0.3) {
         rightArmAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
         updateRightArmUI(rightArmAngle);
-        countRightCurl(rightArmAngle);
+        countExercise(rightArmAngle, 'right');
     } else {
         rightArmAngle = 0;
         updateRightArmUI(0, false);
@@ -635,60 +831,168 @@ function calculateAngle(a, b, c) {
     return angle;
 }
 
-function countLeftCurl(angle) {
-    if (angle > 160) {
-        leftStageState = "down";
-        updateLeftStage("DOWN", "#FF6B6B");
-        updateLeftStageProgress(1);
-    }
-
-    if (angle < 40 && leftStageState === "down") {
-        leftStageState = "up";
-        leftArmCounter++;
-        updateLeftCounter();
-        updateTotalReps();
-        updateLeftStage("UP", "#EF476F");
-        updateLeftStageProgress(0);
-        animateLeftRep();
-        
-        // Count total rep
-        if (!repInProgress) {
-            repInProgress = true;
-            totalRepsCounter++;
-            updateTotalRepsDisplay();
-            animateTotalRep();
-        }
-    }
-}
-
-function countRightCurl(angle) {
-    if (angle > 160) {
-        rightStageState = "down";
-        updateRightStage("DOWN", "#4CC9F0");
-        updateRightStageProgress(1);
-    }
-
-    if (angle < 40 && rightStageState === "down") {
-        rightStageState = "up";
-        rightArmCounter++;
-        updateRightCounter();
-        updateTotalReps();
-        updateRightStage("UP", "#EF476F");
-        updateRightStageProgress(0);
-        animateRightRep();
-        
-        // Count total rep
-        if (!repInProgress) {
-            repInProgress = true;
-            totalRepsCounter++;
-            updateTotalRepsDisplay();
-            animateTotalRep();
-        }
+function countExercise(angle, side) {
+    const config = exerciseConfig[selectedExercise];
+    
+    // Reset repInProgress when both arms are extended (for all exercises)
+    if (side === 'right' && angle > 160 && leftArmAngle > 160) {
+        repInProgress = false;
     }
     
-    // Reset repInProgress when both arms are extended
-    if (angle > 160 && leftArmAngle > 160) {
+    if (side === 'left' && angle > 160 && rightArmAngle > 160) {
         repInProgress = false;
+    }
+    
+    // EXERCISE-SPECIFIC COUNTING LOGIC
+    if (selectedExercise === 'bicep_curl') {
+        // Bicep curl: Count when arm goes from extended (>160) to bent (<40)
+        if (side === 'left') {
+            if (angle > config.angleDown) {
+                leftStageState = "down";
+                updateLeftStage(config.downLabel, config.downColor);
+                updateLeftStageProgress(1);
+            }
+
+            if (angle < config.angleUp && leftStageState === "down") {
+                leftStageState = "up";
+                leftArmCounter++;
+                updateLeftCounter();
+                updateTotalReps();
+                updateLeftStage(config.upLabel, config.upColor);
+                updateLeftStageProgress(0);
+                animateLeftRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        } else { // right arm
+            if (angle > config.angleDown) {
+                rightStageState = "down";
+                updateRightStage(config.downLabel, config.downColor);
+                updateRightStageProgress(1);
+            }
+
+            if (angle < config.angleUp && rightStageState === "down") {
+                rightStageState = "up";
+                rightArmCounter++;
+                updateRightCounter();
+                updateTotalReps();
+                updateRightStage(config.upLabel, config.upColor);
+                updateRightStageProgress(0);
+                animateRightRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        }
+    } 
+    else if (selectedExercise === 'pull_up') {
+        // Pull-up: Count when arm goes from bent (<30) to extended (>120)
+        if (side === 'left') {
+            if (angle < config.angleUp) {
+                leftStageState = "up";
+                updateLeftStage(config.upLabel, config.upColor);
+                updateLeftStageProgress(1);
+            }
+
+            if (angle > config.angleDown && leftStageState === "up") {
+                leftStageState = "down";
+                leftArmCounter++;
+                updateLeftCounter();
+                updateTotalReps();
+                updateLeftStage(config.downLabel, config.downColor);
+                updateLeftStageProgress(0);
+                animateLeftRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        } else { // right arm
+            if (angle < config.angleUp) {
+                rightStageState = "up";
+                updateRightStage(config.upLabel, config.upColor);
+                updateRightStageProgress(1);
+            }
+
+            if (angle > config.angleDown && rightStageState === "up") {
+                rightStageState = "down";
+                rightArmCounter++;
+                updateRightCounter();
+                updateTotalReps();
+                updateRightStage(config.downLabel, config.downColor);
+                updateRightStageProgress(0);
+                animateRightRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        }
+    } 
+    else if (selectedExercise === 'push_up') {
+        // Push-up: Count when arm goes from extended (>150) to bent (<60)
+        if (side === 'left') {
+            if (angle > config.angleDown) {
+                leftStageState = "up";
+                updateLeftStage(config.downLabel, config.downColor);
+                updateLeftStageProgress(1);
+            }
+
+            if (angle < config.angleUp && leftStageState === "up") {
+                leftStageState = "down";
+                leftArmCounter++;
+                updateLeftCounter();
+                updateTotalReps();
+                updateLeftStage(config.upLabel, config.upColor);
+                updateLeftStageProgress(0);
+                animateLeftRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        } else { // right arm
+            if (angle > config.angleDown) {
+                rightStageState = "up";
+                updateRightStage(config.downLabel, config.downColor);
+                updateRightStageProgress(1);
+            }
+
+            if (angle < config.angleUp && rightStageState === "up") {
+                rightStageState = "down";
+                rightArmCounter++;
+                updateRightCounter();
+                updateTotalReps();
+                updateRightStage(config.upLabel, config.upColor);
+                updateRightStageProgress(0);
+                animateRightRep();
+                
+                if (!repInProgress) {
+                    repInProgress = true;
+                    totalRepsCounter++;
+                    updateTotalRepsDisplay();
+                    animateTotalRep();
+                }
+            }
+        }
     }
 }
 
@@ -816,8 +1120,9 @@ function updateArmVisibility(leftVisible, rightVisible) {
 }
 
 function updateStatus(message) {
-    poseStatus.textContent = message;
-    detectionStatus.textContent = message;
+    const config = exerciseConfig[selectedExercise];
+    poseStatus.textContent = `${config.name}: ${message}`;
+    detectionStatus.textContent = `${config.name}: ${message}`;
 }
 
 function updateLatency(latency) {
@@ -828,14 +1133,17 @@ function updateLatency(latency) {
 
 function updateProcessingMode() {
     processingMode.textContent = useAPI ? 'API' : 'Browser';
-    apiToggleBtn.querySelector('.btn-text').textContent = 
-        useAPI ? 'API Mode: ON' : 'API Mode: OFF';
 }
 
-function toggleProcessingMode() {
-    useAPI = !useAPI;
-    updateProcessingMode();
-    updateStatus(useAPI ? 'Using API mode' : 'Using browser mode');
+function startFPSCounter() {
+    setInterval(() => {
+        fps = frameCount;
+        frameCount = 0;
+        fpsCounter.textContent = `${fps} FPS`;
+
+        fpsCounter.style.color = fps < 15 ? '#FF6B6B' :
+                                fps < 25 ? '#FFD166' : '#4CC9F0';
+    }, 1000);
 }
 
 function resetAll() {
@@ -850,8 +1158,11 @@ function resetAll() {
     updateRightCounter();
     updateTotalReps();
     updateTotalRepsDisplay();
-    updateLeftStage('--', '#a0a0c0');
-    updateRightStage('--', '#a0a0c0');
+    
+    // Reset to exercise-specific default colors
+    const config = exerciseConfig[selectedExercise];
+    updateLeftStage('--', config.readyColor);
+    updateRightStage('--', config.readyColor);
     updateLeftStageProgress(0);
     updateRightStageProgress(0);
     clearCanvas();
@@ -863,83 +1174,14 @@ function resetAll() {
     setTimeout(() => {
         totalRepsDisplay.style.color = '#FFFFFF';
     }, 300);
-}
-
-// ==================== CAMERA MANAGEMENT ====================
-
-async function startCamera() {
-    try {
-        updateStatus('Starting camera...');
-
-        await initializeMediaPipe();
-
-        // Get screen dimensions for better mobile sizing
-        const screenWidth = window.innerWidth;
-        const screenHeight = window.innerHeight;
-        
-        // Adjust camera resolution for mobile
-        const isMobile = screenWidth <= 768;
-        const videoConstraints = {
-            video: {
-                width: { ideal: isMobile ? 640 : 1280 },
-                height: { ideal: isMobile ? 480 : 720 },
-                facingMode: 'user',
-                frameRate: { ideal: 30 }
-            }
-        };
-
-        mediaStream = await navigator.mediaDevices.getUserMedia(videoConstraints);
-
-        videoElement.srcObject = mediaStream;
-
-        await new Promise((resolve) => {
-            videoElement.onloadedmetadata = resolve;
-        });
-
-        // Set canvas size to match video
-        overlayCanvas.width = videoElement.videoWidth;
-        overlayCanvas.height = videoElement.videoHeight;
-
-        // Start camera processing
-        camera = new window.Camera(videoElement, {
-            onFrame: async () => {
-                if (pose) {
-                    await pose.send({ image: videoElement });
-                }
-            },
-            width: videoElement.videoWidth,
-            height: videoElement.videoHeight
-        });
-
-        await camera.start();
-        updateStatus('Ready - Move your arms!');
-
-        // Start FPS counter
-        startFPSCounter();
-
-    } catch (error) {
-        console.error('Camera error:', error);
-        updateStatus('Camera access required');
-    }
-}
-
-function startFPSCounter() {
-    setInterval(() => {
-        fps = frameCount;
-        frameCount = 0;
-        fpsCounter.textContent = `${fps} FPS`;
-
-        fpsCounter.style.color = fps < 15 ? '#FF6B6B' :
-                                fps < 25 ? '#FFD166' : '#4CC9F0';
-    }, 1000);
+    
+    updateStatus('Ready - Begin your exercise!');
 }
 
 // ==================== EVENT LISTENERS ====================
 
-apiToggleBtn.addEventListener('click', toggleProcessingMode);
 resetBtn.addEventListener('click', resetAll);
 
-// Counter tap to reset individual counters
 leftCounter.addEventListener('click', () => {
     leftArmCounter = 0;
     updateLeftCounter();
@@ -957,7 +1199,6 @@ totalRepsDisplay.addEventListener('click', () => {
     updateTotalRepsDisplay();
 });
 
-// Handle window resize for better mobile experience
 window.addEventListener('resize', () => {
     if (videoElement.videoWidth && videoElement.videoHeight) {
         overlayCanvas.width = videoElement.videoWidth;
@@ -967,21 +1208,40 @@ window.addEventListener('resize', () => {
 
 // ==================== INITIALIZATION ====================
 
-window.addEventListener('DOMContentLoaded', async () => {
-    console.log('Starting Dual Arm Angle Tracking...');
-
-    await startCamera();
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Fitness Tracker initialized');
+    
+    // Set up exercise selection
+    const exerciseItems = document.querySelectorAll('.exercise-item');
+    console.log(`Found ${exerciseItems.length} exercise items`);
+    
+    exerciseItems.forEach(item => {
+        item.addEventListener('click', function() {
+            const exercise = this.getAttribute('data-exercise');
+            console.log(`Exercise clicked: ${exercise}`);
+            goToDetectionPage(exercise);
+        });
+    });
+    
+    // Set up back button
+    if (backBtn) {
+        backBtn.addEventListener('click', goToSelectionPage);
+    }
+    
+    // Initialize with selection page visible
+    selectionPage.classList.add('active');
+    detectionPage.classList.remove('active');
+    
+    // Set video element properties for mobile
+    videoElement.setAttribute('playsinline', '');
+    videoElement.setAttribute('webkit-playsinline', '');
+    videoElement.setAttribute('muted', '');
+    videoElement.setAttribute('autoplay', '');
+    
     updateProcessingMode();
-
-    console.log('System ready - Left/Right correctly mapped');
 });
 
 // Cleanup
 window.addEventListener('beforeunload', () => {
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-    }
-    if (camera) {
-        camera.stop();
-    }
+    stopCamera();
 });
