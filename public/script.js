@@ -39,8 +39,8 @@ const permissionPrompt = document.getElementById('permissionPrompt');
 const exerciseConfig = {
     bicep_curl: {
         name: 'Bicep Curls',
-        angleUp: 40,    // Angle threshold for "up" position (arm bent)
-        angleDown: 160, // Angle threshold for "down" position (arm extended)
+        angleUp: 40,
+        angleDown: 160,
         upLabel: 'UP',
         downLabel: 'DOWN',
         upColor: '#EF476F',
@@ -50,8 +50,8 @@ const exerciseConfig = {
     },
     pull_up: {
         name: 'Pull-ups',
-        angleUp: 30,    // Different thresholds for pull-ups (chin above bar)
-        angleDown: 120, // Different thresholds for pull-ups (arms extended)
+        angleUp: 30,
+        angleDown: 120,
         upLabel: 'CHIN UP',
         downLabel: 'EXTENDED',
         upColor: '#06D6A0',
@@ -61,8 +61,8 @@ const exerciseConfig = {
     },
     push_up: {
         name: 'Push-ups',
-        angleUp: 60,    // Different thresholds for push-ups (chest down)
-        angleDown: 150, // Different thresholds for push-ups (arms extended)
+        angleUp: 60,
+        angleDown: 150,
         upLabel: 'DOWN',
         downLabel: 'UP',
         upColor: '#EF476F',
@@ -92,17 +92,17 @@ let repInProgress = false;
 let selectedExercise = 'bicep_curl';
 let isCameraStarting = false;
 
-// Colors for correct left/right mapping (person's perspective)
+// Colors for correct left/right mapping
 const COLORS = {
-    leftSide: '#FF6B6B',      // Red for left side (person's left)
-    rightSide: '#4CC9F0',     // Blue for right side (person's right)
-    center: '#FFD166',        // Yellow for center points
-    connections: '#118AB2',   // Blue for skeleton lines
-    angleArc: '#06D6A0',      // Green for angle arcs
-    activeArm: '#EF476F'      // Pink for active arm highlights
+    leftSide: '#FF6B6B',
+    rightSide: '#4CC9F0',
+    center: '#FFD166',
+    connections: '#118AB2',
+    angleArc: '#06D6A0',
+    activeArm: '#EF476F'
 };
 
-// MediaPipe landmark indices (person's perspective) - FULL SET
+// MediaPipe landmark indices
 const LANDMARK_INDICES = {
     NOSE: 0,
     LEFT_EYE_INNER: 1,
@@ -139,9 +139,8 @@ const LANDMARK_INDICES = {
     RIGHT_FOOT_INDEX: 32
 };
 
-// Full skeleton connections as before
+// Full skeleton connections
 const SKELETON_CONNECTIONS = [
-    // Face connections
     [LANDMARK_INDICES.NOSE, LANDMARK_INDICES.LEFT_EYE_INNER],
     [LANDMARK_INDICES.LEFT_EYE_INNER, LANDMARK_INDICES.LEFT_EYE],
     [LANDMARK_INDICES.LEFT_EYE, LANDMARK_INDICES.LEFT_EYE_OUTER],
@@ -151,8 +150,6 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.RIGHT_EYE, LANDMARK_INDICES.RIGHT_EYE_OUTER],
     [LANDMARK_INDICES.RIGHT_EYE_OUTER, LANDMARK_INDICES.RIGHT_EAR],
     [LANDMARK_INDICES.MOUTH_LEFT, LANDMARK_INDICES.MOUTH_RIGHT],
-
-    // Upper body
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.RIGHT_SHOULDER],
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_ELBOW],
     [LANDMARK_INDICES.LEFT_ELBOW, LANDMARK_INDICES.LEFT_WRIST],
@@ -160,16 +157,12 @@ const SKELETON_CONNECTIONS = [
     [LANDMARK_INDICES.RIGHT_ELBOW, LANDMARK_INDICES.RIGHT_WRIST],
     [LANDMARK_INDICES.LEFT_SHOULDER, LANDMARK_INDICES.LEFT_HIP],
     [LANDMARK_INDICES.RIGHT_SHOULDER, LANDMARK_INDICES.RIGHT_HIP],
-
-    // Hand connections
     [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_THUMB],
     [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_INDEX],
     [LANDMARK_INDICES.LEFT_WRIST, LANDMARK_INDICES.LEFT_PINKY],
     [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_THUMB],
     [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_INDEX],
     [LANDMARK_INDICES.RIGHT_WRIST, LANDMARK_INDICES.RIGHT_PINKY],
-
-    // Lower body
     [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.RIGHT_HIP],
     [LANDMARK_INDICES.LEFT_HIP, LANDMARK_INDICES.LEFT_KNEE],
     [LANDMARK_INDICES.LEFT_KNEE, LANDMARK_INDICES.LEFT_ANKLE],
@@ -184,7 +177,7 @@ const SKELETON_CONNECTIONS = [
 // ==================== HELPER FUNCTIONS ====================
 
 function flipX(x, width) {
-    return width - x * width; // Mirror effect
+    return width - x * width;
 }
 
 function flipY(y, height) {
@@ -224,10 +217,10 @@ function goToDetectionPage(exerciseType) {
     // Show permission prompt
     showPermissionPrompt();
     
-    // Start camera
+    // Start camera with a slight delay
     setTimeout(() => {
-        startCamera();
-    }, 300);
+        initializeAndStartCamera();
+    }, 100);
 }
 
 function goToSelectionPage() {
@@ -239,95 +232,98 @@ function goToSelectionPage() {
     // Switch pages
     detectionPage.classList.remove('active');
     selectionPage.classList.add('active');
-    
-    // Reset all counters
-    resetAll();
 }
 
-// ==================== UPDATED STOP CAMERA FUNCTION ====================
-
-function stopCamera() {
-    // Stop MediaPipe camera
-    if (camera) {
-        camera.stop();
-        camera = null;
+function showPermissionPrompt() {
+    if (permissionPrompt) {
+        permissionPrompt.style.display = 'block';
     }
-    
-    // Stop media stream tracks
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => {
-            track.stop();
-        });
-        mediaStream = null;
-    }
-    
-    // Close MediaPipe pose
-    if (pose) {
-        pose.close();
-        pose = null;
-    }
-    
-    // Clear video source
-    videoElement.srcObject = null;
-    
-    // Clear canvas
-    clearCanvas();
-    
-    console.log('Camera stopped');
 }
 
-// ==================== UPDATED START CAMERA FUNCTION ====================
+function hidePermissionPrompt() {
+    if (permissionPrompt) {
+        permissionPrompt.style.display = 'none';
+    }
+}
 
-async function startCamera() {
+// ==================== CAMERA AND MEDIAPIPE MANAGEMENT ====================
+
+async function initializeAndStartCamera() {
     if (isCameraStarting) return;
     isCameraStarting = true;
     
     try {
-        updateStatus('Starting camera...');
+        updateStatus('Initializing camera...');
         
-        // First stop any existing camera
+        // First, ensure MediaPipe is loaded
+        await ensureMediaPipeLoaded();
+        
+        // Then stop any existing camera
         if (mediaStream || camera || pose) {
             stopCamera();
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise(resolve => setTimeout(resolve, 300));
         }
         
-        // Get fresh camera stream
+        // Get camera stream
         const constraints = {
-            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+            video: { 
+                width: { ideal: 640 }, 
+                height: { ideal: 480 }, 
+                facingMode: 'user' 
+            },
             audio: false
         };
         
         mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
         
         if (!mediaStream) {
-            throw new Error('No media stream');
+            throw new Error('Could not access camera');
         }
         
         hidePermissionPrompt();
         videoElement.srcObject = mediaStream;
         
-        // Wait for video to load
-        await new Promise((resolve) => {
-            videoElement.onloadedmetadata = resolve;
-            setTimeout(resolve, 1000);
+        // Wait for video to be ready
+        await new Promise((resolve, reject) => {
+            videoElement.onloadedmetadata = () => {
+                console.log('Video metadata loaded');
+                resolve();
+            };
+            videoElement.onerror = (error) => {
+                console.error('Video error:', error);
+                reject(error);
+            };
+            
+            // Safety timeout
+            setTimeout(() => {
+                if (videoElement.videoWidth > 0) {
+                    resolve();
+                } else {
+                    reject(new Error('Video timeout'));
+                }
+            }, 2000);
         });
         
         // Set canvas size
         overlayCanvas.width = videoElement.videoWidth;
         overlayCanvas.height = videoElement.videoHeight;
         
-        // REINITIALIZE MediaPipe (crucial!)
+        // Initialize MediaPipe pose
         await initializeMediaPipe();
         
         if (!pose) {
-            throw new Error('Pose detection failed');
+            throw new Error('Pose detection initialization failed');
         }
         
-        // Start camera processing
+        // Create and start camera
         camera = new window.Camera(videoElement, {
             onFrame: async () => {
                 if (pose) {
-                    await pose.send({ image: videoElement });
+                    try {
+                        await pose.send({ image: videoElement });
+                    } catch (error) {
+                        console.error('Frame processing error:', error);
+                    }
                 }
             },
             width: videoElement.videoWidth,
@@ -336,46 +332,41 @@ async function startCamera() {
         
         await camera.start();
         updateStatus('Ready - Move into frame!');
+        console.log('Camera started successfully');
         
     } catch (error) {
-        console.error('Camera error:', error);
+        console.error('Camera initialization error:', error);
         updateStatus('Camera error: ' + error.message);
+        // Show error to user
+        alert('Camera initialization failed. Please check permissions and try again.');
     } finally {
         isCameraStarting = false;
     }
 }
 
-// ==================== UPDATED MEDIAPIPE INIT ====================
-
-async function initializeMediaPipe() {
-    try {
-        // Load scripts if needed
-        if (typeof window.Pose === 'undefined') {
-            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');
-            await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
-        }
-        
-        // Create NEW pose instance
-        pose = new window.Pose({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-            }
-        });
-        
-        pose.setOptions({
-            modelComplexity: 1,
-            smoothLandmarks: true,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-        
-        // Reattach the onResults callback (important!)
-        pose.onResults(onPoseResults);
-        
-    } catch (error) {
-        console.error('MediaPipe init error:', error);
-        pose = null;
+async function ensureMediaPipeLoaded() {
+    // Check if MediaPipe is already loaded
+    if (typeof window.Pose !== 'undefined' && typeof window.Camera !== 'undefined') {
+        console.log('MediaPipe already loaded');
+        return;
     }
+    
+    console.log('Loading MediaPipe scripts...');
+    
+    // Load Pose
+    await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');
+    
+    // Load Camera Utils
+    await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
+    
+    // Wait a bit for initialization
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    if (typeof window.Pose === 'undefined') {
+        throw new Error('Failed to load MediaPipe Pose');
+    }
+    
+    console.log('MediaPipe loaded successfully');
 }
 
 function loadScript(src) {
@@ -400,6 +391,79 @@ function loadScript(src) {
     });
 }
 
+async function initializeMediaPipe() {
+    try {
+        // Create new pose instance
+        pose = new window.Pose({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+            }
+        });
+        
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        
+        // Attach the onResults callback
+        pose.onResults(onPoseResults);
+        
+        console.log('MediaPipe Pose initialized');
+    } catch (error) {
+        console.error('MediaPipe init error:', error);
+        pose = null;
+    }
+}
+
+function stopCamera() {
+    console.log('Stopping camera...');
+    
+    // Stop camera processing
+    if (camera) {
+        try {
+            camera.stop();
+        } catch (error) {
+            console.error('Error stopping camera:', error);
+        }
+        camera = null;
+    }
+    
+    // Stop media stream
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => {
+            try {
+                track.stop();
+            } catch (error) {
+                console.error('Error stopping track:', error);
+            }
+        });
+        mediaStream = null;
+    }
+    
+    // Close pose detection
+    if (pose) {
+        try {
+            pose.close();
+        } catch (error) {
+            console.error('Error closing pose:', error);
+        }
+        pose = null;
+    }
+    
+    // Clear video source
+    videoElement.srcObject = null;
+    
+    // Clear canvas
+    clearCanvas();
+    
+    // Reset landmarks
+    landmarks = null;
+    
+    console.log('Camera stopped completely');
+}
+
 // ==================== POSE DETECTION & VISUALIZATION ====================
 
 function onPoseResults(results) {
@@ -415,7 +479,7 @@ function onPoseResults(results) {
         const detectedCount = countDetectedLandmarks(landmarks);
         updateLandmarkStats(detectedCount);
 
-        // Clear and draw skeleton with correct left/right mapping
+        // Clear and draw skeleton
         clearCanvas();
         drawSkeleton(results);
 
@@ -476,7 +540,7 @@ function drawConnections(landmarks, width, height) {
         const end = landmarks[endIdx];
 
         if (start && end && start.visibility > 0.1 && end.visibility > 0.1) {
-            // Determine color based on side (person's perspective)
+            // Determine color based on side
             let color = COLORS.connections;
 
             // Person's left side connections
@@ -503,7 +567,7 @@ function drawConnections(landmarks, width, height) {
                      startIdx === LANDMARK_INDICES.RIGHT_ANKLE ||
                      endIdx === LANDMARK_INDICES.RIGHT_SHOULDER ||
                      endIdx === LANDMARK_INDICES.RIGHT_ELBOW ||
-                     endIdx === LANDMARK_INDICES.RIGHT_WRIST ||
+                     endIdx === LANDMARK_INDices.RIGHT_WRIST ||
                      endIdx === LANDMARK_INDICES.RIGHT_HIP ||
                      endIdx === LANDMARK_INDICES.RIGHT_KNEE ||
                      endIdx === LANDMARK_INDICES.RIGHT_ANKLE) {
@@ -608,7 +672,7 @@ function drawPoint(landmark, width, height, color, size, index) {
     canvasCtx.fillStyle = '#FFFFFF';
     canvasCtx.fill();
 
-    // Draw index number for key landmarks (for debugging)
+    // Draw index number for key landmarks
     if ([0, 11, 12, 13, 14, 15, 16].includes(index)) {
         canvasCtx.fillStyle = '#FFFFFF';
         canvasCtx.font = 'bold 11px Arial';
@@ -657,7 +721,7 @@ function drawAngleArc(shoulder, elbow, wrist, width, height, color, side) {
     const angle = calculateAngle(shoulder, elbow, wrist);
     const radius = 35;
 
-    // Calculate arc angles (vectors from elbow to shoulder and wrist)
+    // Calculate arc angles
     const startAngle = Math.atan2(shoulderY - elbowY, shoulderX - elbowX);
     const endAngle = Math.atan2(wristY - elbowY, wristX - elbowX);
 
@@ -689,12 +753,12 @@ function clearCanvas() {
 // ==================== ARM ANGLE CALCULATION ====================
 
 function calculateArmAngles(landmarks) {
-    // Calculate left arm angle (person's left)
+    // Calculate left arm angle
     const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
     const leftElbow = landmarks[LANDMARK_INDICES.LEFT_ELBOW];
     const leftWrist = landmarks[LANDMARK_INDICES.LEFT_WRIST];
 
-    // Calculate right arm angle (person's right)
+    // Calculate right arm angle
     const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
     const rightElbow = landmarks[LANDMARK_INDICES.RIGHT_ELBOW];
     const rightWrist = landmarks[LANDMARK_INDICES.RIGHT_WRIST];
@@ -773,14 +837,13 @@ function countExercise(angle, side) {
         }
     }
     
-    // Get form validation results (you'll need to implement these)
+    // Get form validation results
     const handsAbove = areHandsAboveShoulders(landmarks);
     const elbowsBelow = areElbowsBelowShoulders(landmarks);
     
-    // EXERCISE-SPECIFIC COUNTING LOGIC (aligned with Dart logic)
+    // EXERCISE-SPECIFIC COUNTING LOGIC
     if (selectedExercise === 'bicep_curl') {
         // Bicep curl: Count when arm goes from extended (>160) to curled (<45)
-        // AND elbows must be below shoulders
         if (!elbowsBelow) return;
         
         if (side === 'left') {
@@ -833,7 +896,6 @@ function countExercise(angle, side) {
     } 
     else if (selectedExercise === 'pull_up') {
         // Pull-up: Count when arm goes from extended (>140) to bent (<65)
-        // AND hands must be above shoulders
         if (!handsAbove) return;
         
         if (side === 'left') {
@@ -937,7 +999,6 @@ function countExercise(angle, side) {
     }
 }
 
-// You need to implement these form validation functions:
 function areHandsAboveShoulders(landmarks) {
     const leftShoulder = landmarks[LANDMARK_INDICES.LEFT_SHOULDER];
     const rightShoulder = landmarks[LANDMARK_INDICES.RIGHT_SHOULDER];
@@ -946,7 +1007,7 @@ function areHandsAboveShoulders(landmarks) {
     
     if (!leftShoulder || !rightShoulder || !leftWrist || !rightWrist) return false;
     
-    // Check if wrists are above shoulders (lower y value means higher position)
+    // Check if wrists are above shoulders
     const leftHandAbove = leftWrist.y < leftShoulder.y;
     const rightHandAbove = rightWrist.y < rightShoulder.y;
     
@@ -961,7 +1022,7 @@ function areElbowsBelowShoulders(landmarks) {
     
     if (!leftShoulder || !rightShoulder || !leftElbow || !rightElbow) return false;
     
-    // Check if elbows are below shoulders (higher y value means lower position)
+    // Check if elbows are below shoulders
     const leftElbowBelow = leftElbow.y > leftShoulder.y;
     const rightElbowBelow = rightElbow.y > rightShoulder.y;
     
@@ -1133,35 +1194,36 @@ function startFPSCounter() {
     }, 1000);
 }
 
-// ==================== EVENT LISTENERS ====================
-
-resetBtn.addEventListener('click', resetAll);
-
-leftCounter.addEventListener('click', () => {
+function resetAll() {
+    console.log('Resetting all counters');
+    
     leftArmCounter = 0;
-    updateLeftCounter();
-    updateTotalReps();
-});
-
-rightCounter.addEventListener('click', () => {
     rightArmCounter = 0;
-    updateRightCounter();
-    updateTotalReps();
-});
-
-totalRepsDisplay.addEventListener('click', () => {
     totalRepsCounter = 0;
-    updateTotalRepsDisplay();
-});
-
-window.addEventListener('resize', () => {
-    if (videoElement.videoWidth && videoElement.videoHeight) {
-        overlayCanvas.width = videoElement.videoWidth;
-        overlayCanvas.height = videoElement.videoHeight;
+    leftArmAngle = 0;
+    rightArmAngle = 0;
+    
+    // Reset UI
+    leftCounter.textContent = '0';
+    rightCounter.textContent = '0';
+    totalCounter.textContent = '0';
+    totalRepsDisplay.textContent = '0';
+    
+    leftAngleValue.textContent = '0°';
+    rightAngleValue.textContent = '0°';
+    
+    const config = exerciseConfig[selectedExercise];
+    if (config) {
+        updateLeftStage('--', config.readyColor);
+        updateRightStage('--', config.readyColor);
+        updateLeftStageProgress(0);
+        updateRightStageProgress(0);
     }
-});
+    
+    updateStatus('Ready');
+}
 
-// ==================== INITIALIZATION ====================
+// ==================== EVENT LISTENERS ====================
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Fitness Tracker initialized');
@@ -1175,27 +1237,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const exercise = this.getAttribute('data-exercise');
             console.log(`Exercise clicked: ${exercise}`);
             
-            // Update selected exercise
-            selectedExercise = exercise;
-            const config = exerciseConfig[exercise];
-            
-            // Update UI
-            currentExerciseName.textContent = config.name;
-            
-            // Switch pages
-            selectionPage.classList.remove('active');
-            detectionPage.classList.add('active');
-            
-            // Reset counters for new exercise
-            resetAll();
-            
-            // Show permission prompt immediately
-            showPermissionPrompt();
-            
-            // Start camera after a short delay
-            setTimeout(() => {
-                startCamera();
-            }, 300);
+            // Use the new function
+            goToDetectionPage(exercise);
         });
     });
     
@@ -1203,6 +1246,43 @@ document.addEventListener('DOMContentLoaded', function() {
     if (backBtn) {
         backBtn.addEventListener('click', goToSelectionPage);
     }
+    
+    // Set up reset button
+    if (resetBtn) {
+        resetBtn.addEventListener('click', resetAll);
+    }
+    
+    // Set up counter click events
+    if (leftCounter) {
+        leftCounter.addEventListener('click', () => {
+            leftArmCounter = 0;
+            updateLeftCounter();
+            updateTotalReps();
+        });
+    }
+    
+    if (rightCounter) {
+        rightCounter.addEventListener('click', () => {
+            rightArmCounter = 0;
+            updateRightCounter();
+            updateTotalReps();
+        });
+    }
+    
+    if (totalRepsDisplay) {
+        totalRepsDisplay.addEventListener('click', () => {
+            totalRepsCounter = 0;
+            updateTotalRepsDisplay();
+        });
+    }
+    
+    // Window resize handler
+    window.addEventListener('resize', () => {
+        if (videoElement.videoWidth && videoElement.videoHeight) {
+            overlayCanvas.width = videoElement.videoWidth;
+            overlayCanvas.height = videoElement.videoHeight;
+        }
+    });
     
     // Initialize with selection page visible
     selectionPage.classList.add('active');
@@ -1215,6 +1295,9 @@ document.addEventListener('DOMContentLoaded', function() {
     videoElement.setAttribute('autoplay', '');
     
     updateProcessingMode();
+    
+    // Start FPS counter
+    startFPSCounter();
 });
 
 // Cleanup
