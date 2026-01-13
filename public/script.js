@@ -1125,7 +1125,7 @@ function updateTitleAngles() {
     rightAngleTitle.textContent = `${Math.round(rightArmAngle)}°`;
 }
 
-function updateLeftArmUI(angle, visible = true) {
+/*function updateLeftArmUI(angle, visible = true) {
     const roundedAngle = Math.round(angle);
     leftAngleValue.textContent = `${roundedAngle}°`;
 
@@ -1177,7 +1177,7 @@ function updateLeftCounter() {
     leftCounter.textContent = leftArmCounter;
     leftCounter.classList.add('rep-animation');
     setTimeout(() => leftCounter.classList.remove('rep-animation'), 500);
-}
+}*/
 
 function updateRightCounter() {
     rightCounter.textContent = rightArmCounter;
